@@ -1,9 +1,9 @@
 # 프로젝트 작업 목록 (Task List)
 
 ## Phase 1: 기본 물리 및 조작 프로토타입
-- [ ] **프로젝트 세팅**: 모바일 타겟 프레임(60) 설정 및 화면 꺼짐 방지
-- [ ] **환경 구성**: 해상도 비율(Aspect Ratio) 대응 고정 카메라(Orthographic) 구성 및 Tilemap + CompositeCollider2D 기반 미로(Maze) 뼈대 구축
-- [ ] **Player 생성**: 물리 엔진(Box2D) 중력의 영향을 받는 기본 Ball 프리팹 생성 (Continuous, Interpolate 모드, 적절한 크기 설정)
+- [x] **프로젝트 세팅**: 모바일 타겟 프레임(60) 설정 및 화면 꺼짐 방지 (Bootstrapper.cs 구현 완료)
+- [x] **환경 구성**: 해상도 비율(Aspect Ratio) 대응 고정 카메라(Orthographic) 구성 및 Tilemap + CompositeCollider2D 기반 미로(Maze) 뼈대 구축
+- [x] **Player 생성**: 물리 엔진(Box2D) 중력의 영향을 받는 기본 Ball 프리팹 생성 (Continuous, Interpolate 모드, 적절한 크기 설정)
 - [ ] **조작 구현 (Input)**: 화면 터치 & 드래그 각도(`Mathf.Atan2`) 기반 미로 회전. (UI 이벤트 터치 무시, 속도 상한선 체크 및 보간 적용)
 
 ## Phase 2: 인게임 로직 및 게임 오버 플로우 (Fast Retry)

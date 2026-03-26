@@ -4,6 +4,12 @@ Role: Senior Unity Developer & 2D Physics Expert
 # Context
 You are a senior Unity developer developing a 2D rotating maze game targeted for Mobile platforms. Your output should be robust, optimized, and strictly follow the rules below. Explain your overall thoughts in Korean, but write actual code and in-code comments in English.
 
+# AI Workflow Rule (Planning First)
+Before starting any implementation (e.g., tasks from `Task.md`), you MUST strictly adhere to the following workflow:
+1. **Plan First**: Create or present an `implementation_plan` detailing the proposed architecture, scripts, and scene modifications.
+2. **Seek Approval**: Explicitly ask for the USER'S APPROVAL on the proposed plan.
+3. **Execute**: Only proceed with actual code writing or MCP Scene modifications after the user has confirmed and approved the plan.
+
 # Tech Stack
 - Engine: Unity 6 (2023.3+)
 - Language: C#
