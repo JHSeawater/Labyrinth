@@ -22,6 +22,7 @@ Project: Labyrinth (2D Rotating Maze)
 ## 3. 조작 방식 및 시점 (Controls & Camera)
 * **조작 (모바일 터치 드래그)**: 
   - 화면 빈 공간을 터치한 상태로 원형 또는 횡/종으로 드래그하면, 각도(`Mathf.Atan2`) 변화량을 감지해 미로가 매끄럽게 회전함.
+  - **물리 구현 방식 (B방식: 카메라 착시 + 중력 회전)**: 미로 오브젝트는 `Transform(0,0,0)`으로 완전 고정(Static Collider)되며, `Physics2D.gravity` 방향 회전과 카메라 역방향 회전을 동기화하여 유저 눈에는 미로가 도는 것처럼 보이는 착시 효과를 구현. 이 방식은 Kinematic 회전 시 발생하는 Box2D 표면 속도 전달(Surface Velocity Transfer) 버그와 Static Collider Rebuild 성능 저하를 근본적으로 차단함.
 * **UI 터치 충돌 방지 (EventSystem)**:
   - 터치 입력 처리 시 유니티의 EventSystem을 활용(`IsPointerOverGameObject`), 일시정지 버튼 등 **UI를 터치한 경우에는 미로 회전 조작이 무시**되도록 완벽히 예외 처리함.
 * **물리 엔진 폭주 제어 (조작 한계치)**:
@@ -67,6 +68,9 @@ Project: Labyrinth (2D Rotating Maze)
 * **클리어 피드백 (Clear)**: 공이 Goal에 무사히 들어갔을 때 경쾌한 성공음(SFX)과 시각적 파티클(Particle) 효과 재생.
 
 ## 7. 스크립트 아키텍처 원칙 (Architecture & Modularization)
-* **스크립트 역할 분리 (모듈화)**: 하나의 스크립트에 기능이 뭉치는 스파게티 코드를 방지하기 위해 기능별 Manager 구조를 도입하여 책임을 명확히 분리함. (예시: `InputController`, `MazeRotator`, `GameManager`)
-* **물리 연산과 프레임의 분리**: 물리 연산 안정성(지터링 및 터널링 방지)을 위해, 사용자 입력 감지는 매 프레임(`Update`)마다 반응성 있게 처리하되, 실제 객체 회전 및 이동은 물리 엔진 주기(`FixedUpdate` 단위, `MoveRotation` 활용)에 맞춰 엄격히 격리함.
+* **스크립트 역할 분리 (모듈화)**: 하나의 스크립트에 기능이 뭉치는 스파게티 코드를 방지하기 위해 기능별 Manager 구조를 도입하여 책임을 명확히 분리함. (예시: `InputController`, `WorldRotationController`, `CameraController`, `GameManager`)
+* **물리 회전 구현 방식 (B방식: 카메라 착시)**:
+  - 미로의 `Transform`은 항상 `(0,0,0)`으로 고정하여 Static Collider로 유지함. `Rigidbody2D.MoveRotation()` 방식을 사용하지 않음.
+  - `WorldRotationController.FixedUpdate()`에서 각도 보간(`LerpAngle`) 및 `Physics2D.gravity` 방향 갱신을 처리함.
+  - 카메라 `transform.rotation` 적용은 반드시 **`CameraController.LateUpdate()`**에서 `-angle`로 역회전하여, 모든 물리 연산 이후 Jittering 없이 렌더링되도록 보장함.
 * **데이터 구조화 (ScriptableObject)**: 미로 조작감(최대 회전 속도, 보간 수치)이나 중력, 반발력 등 잦은 밸런싱이 필요한 주요 수치들은 스크립트에 하드코딩하지 않고, `ScriptableObject` 형태(`GameSettings.asset` 등)로 분리하여 기획자가 인스펙터 창에서 즉각 튜닝하고 모바일 타겟 플랫폼을 빌드 테스트할 수 있는 기반을 구축함.

@@ -4,7 +4,23 @@
 - [x] **프로젝트 세팅**: 모바일 타겟 프레임(60) 설정 및 화면 꺼짐 방지 (Bootstrapper.cs 구현 완료)
 - [x] **환경 구성**: 해상도 비율(Aspect Ratio) 대응 고정 카메라(Orthographic) 구성 및 Tilemap + CompositeCollider2D 기반 미로(Maze) 뼈대 구축
 - [x] **Player 생성**: 물리 엔진(Box2D) 중력의 영향을 받는 기본 Ball 프리팹 생성 (Continuous, Interpolate 모드, 적절한 크기 설정)
-- [ ] **조작 구현 (Input)**: 화면 터치 & 드래그 각도(`Mathf.Atan2`) 기반 미로 회전. (UI 이벤트 터치 무시, 속도 상한선 체크 및 보간 적용)
+- [x] **조작 구현 (Input)**: 화면 터치 & 드래그 각도(`Mathf.Atan2`) 기반 미로 회전. (UI 이벤트 터치 무시, 속도 상한선 체크 및 보간 적용) (완료)
+
+## Phase 1.5: 물리 아키텍처 리팩토링 (카메라 착시 방식 전환) [최우선]
+> **배경**: Kinematic 미로 회전 시 Box2D 표면 속도 전달로 인해 공이 의도치 않게 튀어오르는 버그.  
+> **해결**: "카메라 착시 + 중력 회전" 방식으로 전환. 미로는 Transform(0,0,0)으로 완전 고정, 카메라를 역방향 회전, `Physics2D.gravity`를 동기화.
+- [ ] **[Editor] Maze 루트 오브젝트의 `Rigidbody2D` 컴포넌트 제거** (Transform을 (0,0,0)으로 초기화 및 고정)
+- [ ] **[Script] `MazeRotator.cs` → `WorldRotationController.cs` 리팩토링**:
+  - `Rigidbody2D` 의존성 제거, `MoveRotation()` 삭제
+  - `FixedUpdate`에서 각도 보간 계산 후 `Physics2D.gravity` 방향 갱신
+  - `CameraController`에 현재 각도를 매 프레임 제공하는 인터페이스 추가
+- [ ] **[Script] `CameraController.cs` 수정**:
+  - `SetWorldRotation(float angle)` 역할의 각도값을 참조하여 **`LateUpdate()`** 에서 `transform.rotation = Quaternion.Euler(0, 0, -angle)` 적용
+  - ⚠️ 카메라 회전 적용은 반드시 `LateUpdate()`에서 (모든 물리·로직 완료 후 렌더링, Jittering 방지)
+- [ ] **[Editor] UI Canvas의 Render Mode가 `Screen Space - Overlay`인지 확인** (Camera 회전 시 HUD 같이 돌아가는 버그 방지)
+- [ ] **[Editor] 배경(Background) 스프라이트/텍스처가 있는 경우, 해당 오브젝트를 Main Camera의 자식(Child)으로 이동** (착시 유지, 단색 배경이면 불필요)
+- [ ] **[Script] `InputController.cs` 참조 수정**: `MazeRotator` → `WorldRotationController`
+- [ ] **[QA] 검증**: 빠른 회전 시 공이 튀어오르지 않는지, 중력 방향이 화면상 "아래"와 일치하는지 확인
 
 ## Phase 2: 인게임 로직 및 게임 오버 플로우 (Fast Retry)
 - [ ] **Goal 로직**: 공이 닿았을 때 클리어(성공) 판정을 내리는 트리거 구현

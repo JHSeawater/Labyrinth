@@ -8,6 +8,55 @@
 
 ---
 
+### 📅 [2026-03-27] Phase 1.5: 물리 아키텍처 리팩토링 (카메라 착시 방식)
+
+* **배경 및 원인**: 기존 Kinematic `Rigidbody2D.MoveRotation()` 방식에서 Box2D의 **표면 속도 전달(Surface Velocity Transfer)** 버그 발견. 빠른 회전 시 공이 의도치 않게 튀어오르는 현상 발생. `Continuous`, 속도 클램핑으로 근본 해결 불가.
+* **해결 방식 채택 (B방식: 카메라 착시 + 중력 회전)**:
+  * 미로 오브젝트를 `Transform(0,0,0)` 완전 고정 → Static Collider로 전환, Static Collider Rebuild 성능 저하 원천 차단.
+  * `Physics2D.gravity` 방향을 인터랙션 각도에 맞게 매 `FixedUpdate`에서 갱신.
+  * `CameraController.LateUpdate()`에서 `-angle`로 카메라 역방향 회전 → 유저 눈에는 미로가 도는 착시 효과.
+* **변경 파일**:
+  * `WorldRotationController.cs` [신규]: 기존 `MazeRotator.cs` 역할 대체. 각도 보간 + `Physics2D.gravity` 갱신 + `CameraController` 호출 담당.
+  * `CameraController.cs` [수정]: `SetWorldRotation(float angle)` 메서드 추가, `LateUpdate()`에서 카메라 역회전 적용.
+  * `InputController.cs` [수정]: `MazeRotator` → `WorldRotationController` 참조 교체, 개발 임시 진단 로그 삭제.
+  * `GDD.md` [수정]: 7장 아키텍처 원칙을 B방식으로 업데이트, 3장 조작 방식 설명 보완.
+* **MCP 씬 변경**: `Maze` 오브젝트에서 `Rigidbody2D` 및 `MazeRotator` 컴포넌트 제거. `InputManager`에 `WorldRotationController` 추가 및 `CameraController` 레퍼런스 연결. 씬 저장 완료.
+* **주의 사항 (QA 필수)**:
+  * ⚠️ UI Canvas의 Render Mode가 **`Screen Space - Overlay`** 인지 반드시 확인 (Camera 회전 시 HUD 같이 돌아가는 버그 방지).
+  * ⚠️ 배경에 이미지/스프라이트가 있다면 해당 오브젝트를 **Main Camera의 자식**으로 이동해야 착시 유지됨 (현재 단색 배경이면 불필요).
+
+---
+
+
+### 📅 [2026-03-27] Phase 1 스크립트 리팩토링 및 터치 구조 개선
+* **작업 내용**:
+  * `CameraController.cs`, `MazeRotator.cs`: 외부 접근이 불필요한 설정 변수들을 `[SerializeField] private`로 캡슐화 처리하여 보안 및 프로젝트 룰 `.cursorrules` 준수.
+  * `InputController.cs`: 
+    1. 메모리 최적화: `UpdateDrag`에서 매 프레임 발생하던 `Debug.Log` 문자열 할당부를 삭제하여 프레임 스파이크 방지.
+    2. 터치 대응 고도화: 단일 포인터(`Pointer.current`) 추적 방식에서 `UnityEngine.InputSystem.EnhancedTouch.Touch` 기반으로 업그레이드. 처음 닿은 `finger.index`만 추적하도록 하여 화면에 추가 손가락이 닿아도 회전 중심이 튀지 않음.
+    3. UI 터치 가드 보충: `EventSystem.current.IsPointerOverGameObject(touch.finger.index)`로 각 터치 슬롯에 대한 UI 점유 여부를 정확히 판단하도록 방어 코드 보강.
+* **해결된 이슈**: 다중 터치 시 오작동 가능성 차단 및 가비지 컬렉터(GC) 부하 해소.
+
+---
+
+### 📅 [2026-03-26] 이슈 해결: New Input System 패키지로 인한 Legacy Input 차단 버그
+* **문제 상황**: 에디터의 Game 뷰에서 마우스를 드래그해도 미로가 회전하지 않고, `Input.GetMouseButtonDown` 등의 레거시 코드가 아예 이벤트를 수신하지 못하고 조용히 씹히는 현상 발생.
+* **원인 분석**: 프로젝트에 `com.unity.inputsystem` (New Input System) 패키지가 기본 설치 및 활성화되어 있어, 유니티 엔진이 기존 Legacy Input Manager 방식의 API 호출을 강제로 비활성화(에러 처리)시킨 상태였음.
+* **조치 사항**: 플레이어 세팅에서 복잡하게 Active Input Handling을 되돌리는 대신, `InputController.cs`를 최신의 견고한 Input System API인 `UnityEngine.InputSystem.Pointer.current`를 직접 사용하도록 전면 업그레이드 마이그레이션 완료.
+* **교훈 및 규칙**: 유니티 6 환경에서는 Legacy Input 코드가 호환성 충돌로 무력화될 가능성이 매우 높으므로, 향후 입력 코드 작성 시 반드시 `Pointer.current` 등 New Input System API를 1순위로 사용할 것.
+
+---
+
+### 📅 [2026-03-26] Phase 1.4: 터치/물리 회전 로직 탑재 (Phase 1 완료)
+* **작업 내용**: 
+  * `MazeRotator.cs`: FixedUpdate 내 Rigidbody2D.MoveRotation을 통한 물리 회전 적용. 고속 스와이프 방지를 위한 최대 회전각 Clamp. 
+  * `InputController.cs`: Legacy Input 기반 모바일 터치 및 마우스 드래그 추적. `MazeRotator`로 직접 참조(Method Call) 통신 구축을 통해 Update 오버헤드 최소화.
+  * 씬에 `InputManager` 빈 오브젝트 및 `EventSystem` 구축 완료.
+* **해결된 이슈**: 터치 스냅 방지 완벽 수식(Touch 시점 오프셋 연산) 적용. UI 클릭 시 미로 회전 무시(`fingerId` 인자 포함) `IsPointerOverGameObject` 처리.
+* **다음 목표**: 전체 핵심 뼈대인 Phase 1 작업 완료. 인게임 Goal 및 Game Manager 관련 Phase 2 진입 대기.
+
+---
+
 ### 📅 [2026-03-25] Phase 1.3: Player Ball 물리 세팅 및 프리팹 구축
 * **작업 내용**: 
   * `PlayerBall` 게임 오브젝트 및 프리팹(`Assets/Prefabs/PlayerBall.prefab`) 생성 완료.

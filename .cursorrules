@@ -16,37 +16,62 @@ Before starting any implementation (e.g., tasks from `Task.md`), you MUST strict
 - Physics: Box2D (Unity 2D Physics)
 - Target Platform: Mobile (iOS / Android)
 
-# Coding & Architecture Rules
-1. Unity-Way Encapsulation: Do NOT use `public` fields for Inspector exposure. Always use `[SerializeField] private` and add `[Header]` or `[Tooltip]`. Use Properties (`public int Score { get; private set; }`) for external read-only access.
-2. GC & Performance Optimization: Avoid memory allocations in `Update()`, `FixedUpdate()`, and Coroutines. Do NOT use `LINQ` or instantiate new objects/strings in hot paths. Use Object Pooling for frequently spawned items (if any).
-3. Physics Optimization & Behavior:
-   - All physics-applied logic MUST be in `FixedUpdate()`. 
-   - NEVER use `Transform.Rotate` for physics objects.
-   - Use `Rigidbody2D.MoveRotation()` for the Kinematic Maze body. When using `Mathf.LerpAngle` or calculating physics movement inside `FixedUpdate()`, ALWAYS use `Time.fixedDeltaTime` instead of `Time.deltaTime`.
-   - **Crucial for Ball**: The Ball MUST be purely driven by Unity's physics engine gravity (`gravityScale = 1`). Do NOT write code to add force/torque to the Ball to move it.
-   - **Rely on Editor Features**: Do NOT write scripts for physics bounce/friction or layer-based collision ignoring. Leave comments or debug logs reminding the developer to use Physics Material 2D and Layer Collision Matrix in the Unity Editor.
-   - **Crucial for Tunneling**: Set the Ball's `Rigidbody2D.collisionDetectionMode` to `Continuous` to prevent tunneling through thin maze walls at high rotation speeds. Ensure it is set to `Interpolate` for smooth rendering.
-   - **Project Settings Reminder**: Increase "Velocity Iterations" and "Position Iterations" (e.g., to 8 and 4, or higher) in `Edit > Project Settings > Physics 2D` if the ball behaves erratically during fast maze rotations.
-4. Caching Component: NEVER use `GetComponent<T>()` or `GameObject.Find()` inside `Update()`. Cache references in `Awake()`. Use `TryGetComponent<T>()` for physics collision events.
-5. Input System & Decoupling: Use the **Unity Legacy Input Manager** (`Input.GetTouch`, `Input.GetMouseButton` 등) instead of the New Input System to prevent logic mix-ups and setup overhead.
-   - **UI Touch Guard**: When implementing touch/mouse input, ALWAYS check `UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject()` first. For mobile touches, ensure to pass the `touch.fingerId` to the method. If it returns true, ignore the input to prevent rotating the maze when the user taps UI buttons (like Pause).
-   - Separate Input logic from Physics logic using C# Events (`event Action`). (e.g., `InputHandler` triggers an event -> `MazeRotator` listens and updates).
-6. Architecture & State Management: Use a Composition-based approach. Avoid monolithic God classes. Use simple Finite State Machines (e.g., `enum GameState` for Play, Pause, Clear) to manage game flow.
+# Universal Unity Development & Optimization Rules
+1. GC & Memory Allocation Prevention (Crucial):
+   - No Allocations in Hot Paths: NEVER use the `new` keyword, string concatenation (e.g., `str + str`), or allocate arrays inside `Update()`, `FixedUpdate()`, or `LateUpdate()`.
+   - NO LINQ: NEVER use LINQ (`Where`, `ToList`, etc.) in functions called every frame to avoid performance drops and GC.
+   - Coroutine Yield Caching: Inside an `IEnumerator` loop (`while`, `for`), NEVER allocate `yield return new WaitForSeconds(time);` repeatedly. Always cache it outside the loop (e.g., `var wait = new WaitForSeconds(time);`) and reuse it.
+   - Mandatory Object Pooling: For objects frequently spawned/destroyed (bullets, particles, enemies), DO NOT use `Instantiate()` and `Destroy()`. You MUST use Unity's built-in `UnityEngine.Pool.ObjectPool<T>`.
+
+2. Reference, Event Management & Memory Leak Prevention:
+   - No Runtime Searching: NEVER call `GetComponent<T>()`, `GameObject.Find()`, or `FindObjectOfType()` inside `Update()`. Always cache them in `Awake()` or `Start()` into global variables.
+   - Strict Event Subscription (Prevent Leaks): When subscribing to C# `event`, `Action`, or `UnityEvent` with `+=`, you MUST pair it with `-=` in `OnDisable()` or `OnDestroy()` to completely prevent memory leaks during scene transitions.
+   - Collision Event Optimization: Inside `OnCollisionEnter`, `OnTriggerEnter`, etc., NEVER use `GetComponent<T>()`. Use the non-allocating **`TryGetComponent<T>(out var component)`** instead.
+   - Tag Comparison Optimization: NEVER use `gameObject.tag == "Player"`. You MUST use **`gameObject.CompareTag("Player")`**.
+
+3. Physics Engine Rules:
+   - Isolate Physics Logic: Logic involving adding forces (`AddForce`) or physics-based movement MUST be written in **`FixedUpdate()`**, not `Update()`.
+   - Fixed Delta Time: When applying continuous value changes (like `Lerp`) inside `FixedUpdate()`, you MUST use **`Time.fixedDeltaTime`** instead of `Time.deltaTime`.
+   - Do NOT Manipulate Transform Directly: When manipulating physics objects (`Rigidbody`/`Rigidbody2D`), NEVER use `transform.position` or `transform.Rotate`. Always use **`Rigidbody.MovePosition()`** and **`Rigidbody.MoveRotation()`**.
+
+4. UI (uGUI) Optimization:
+   - Disable Raycast Target: For background images or text components that don't need interaction, you MUST turn off the **`Raycast Target`** option (`false`) to reduce UI calculation overhead.
+   - Prevent TextMeshPro String Allocation: When displaying numbers on UI (score, time), NEVER use string concatenation (`text.text = "Score: " + score;`). Instead, use **`text.SetText("Score: {0}", score);`** to minimize garbage generation.
+   - Separate Canvases: Do NOT place frequently updating UI and static UI in the same Canvas. Separate them into different `Canvas` components.
+   - String Caching (Hash): When changing parameters for `Animator` or `Shader`, NEVER pass strings directly. Cache them as integer values in `Awake()` using **`Animator.StringToHash()`** / **`Shader.PropertyToID()`**.
+
+5. Architecture & Clean Code (Unity-Way):
+   - Access Modifiers: NEVER use `public` fields just for Inspector exposure. Always use **`[SerializeField] private`** to encapsulate state, and use C# Properties for external reading.
+   - Data-Driven Design: Do NOT hardcode static data (stats, item info, level settings) inside MonoBehaviours or Singletons. Always structure data management using **`ScriptableObject`** to allow independent management at the Editor level.
+   - No Magic Numbers/Strings: Do NOT write arbitrary numbers (`5.0f`) or strings (`"Player"`, `"Level1"`) directly in the code logic. Declare them clearly at the top of the class as `private const` or `readonly`, or expose them with `[SerializeField]`.
+   - Safeties & Error Logging: Always do Null checks before using referenced components/objects. When outputting errors or warnings, use **`Debug.LogWarning("Message", this);`** to include the context object.
+
+# Project Specific Rules (Labyrinth - 2D Rotating Maze)
+1. Ball Physics & Tunneling Prevention:
+   - The Ball MUST be purely driven by Unity's physics engine gravity (`gravityScale = 1`). Do NOT write code to add force/torque to move it.
+   - ALWAYS set the Ball's `Rigidbody2D.collisionDetectionMode` to `Continuous` to prevent tunneling through thin maze walls at high rotation speeds. Ensure it is set to `Interpolate` for smooth rendering.
+   - Do NOT write scripts for physics bounce/friction or layer-based collision ignoring. Leave comments/logs reminding the developer to use Physics Material 2D and Layer Collision Matrix in the Unity Editor.
+   - **Project Settings Reminder**: Increase "Velocity Iterations" and "Position Iterations" (e.g., to 8 and 4, or higher) in `Edit > Project Settings > Physics 2D` if needed.
+2. Input System & UI Touch Guard:
+   - Use the **Unity 6 New Input System** (`UnityEngine.InputSystem.EnhancedTouch` or `Pointer.current`) to prevent compatibility issues where legacy input is silently blocked by the active package setup.
+   - **Crucial UI Guard**: When implementing touch/mouse input, ALWAYS check `UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject()` first. For enhanced touch, pass the `touch.finger.index`. If true, ignore the input to prevent rotating the maze when tapping UI buttons.
+   - Separate Input logic from Physics logic (e.g., `InputController` explicitly sets the target angle on `MazeRotator` rather than mixing coordinate generation with physics updates).
+3. State Management & Mobile Handling:
    - **Fast Retry Implementation**: For restarting a level upon failure, do NOT use `SceneManager.LoadScene()`. Instead, reset the `Transform` (position, rotation) and `Rigidbody2D` (velocity, angularVelocity to 0) of the Ball and Maze to their cached initial states.
    - **Mobile Focus/Pause Handling**: Strictly implement `OnApplicationPause(bool isPaused)` in the `GameManager`. If the game goes to the background, automatically set the state to Pause, freeze the physics simulation (`Time.timeScale = 0`), and show the Pause UI.
-7. Mobile Initialization & Safe Area: Always ensure basic mobile settings are applied early (e.g., in a `GameManager` or `Bootstrapper`'s `Awake()`):
-   - `Application.targetFrameRate = 60;` (or 120)
-   - `Screen.sleepTimeout = SleepTimeout.NeverSleep;`
-   - **UI & Screen Handling**: Always implement a "Safe Area" script for root Canvas panels to prevent UI from being obscured by mobile notches. When calculating touch-to-world positions, ensure the Camera's aspect ratio or orthographic size is considered.
-8. Error Handling: Always add Null checks for explicitly referenced components. Log meaningful warnings using `Debug.LogWarning("Context", this)` to preserve context object.
-9. Naming Conventions: PascalCase for classes/methods (`RotateMaze`), camelCase for local variables, and `_camelCase` for private fields (`_moveSpeed`).
-10. Development Logging: After completing a significant feature (e.g., Phase 1) or fixing a bug, briefly summarize the changes, causes, and solutions, and prepend them to `DevelopLog.md` following its layout.
-11. Folder Structure: Strictly organize files into standard Unity directories under `Assets/` (e.g., `Scripts/`, `Prefabs/`, `Scenes/`, `PhysicsMaterials/`, `Sprites/`). NEVER place scripts or assets loosely in the root `Assets/` folder.
+   - **Mobile Initialization**: In `GameManager` or `Bootstrapper`'s `Awake()`, enforce:
+     `Application.targetFrameRate = 60;` (or 120)
+     `Screen.sleepTimeout = SleepTimeout.NeverSleep;`
+   - **UI & Screen Handling**: Always implement a "Safe Area" script for root Canvas panels to prevent UI from being obscured by mobile notches.
+4. Conventions & Project Management:
+   - Naming Conventions: PascalCase for classes/methods (`RotateMaze`), camelCase for local variables, and `_camelCase` for private fields (`_moveSpeed`).
+   - Development Logging: After completing a significant feature (e.g., Phase 1) or fixing a bug, briefly summarize changes/causes/solutions, and prepend them to `DevelopLog.md`.
+   - Folder Structure: Strictly organize files into standard Unity directories under `Assets/` (e.g., `Scripts/`, `Prefabs/`, `Scenes/`, `PhysicsMaterials/`, `Sprites/`). NEVER place scripts/assets loosely in the root `Assets/` folder.
 
 # Game Logic Reference
 - Primary Goal: Tilt or rotate the maze to guide the ball to the goal solely via gravity.
 - Coordinate System: Convert screen touch position to world point, calculate delta angle (`Mathf.Atan2`) from the maze center, and apply rotation smoothly.
-   - **Smooth Rotation Input**: When calculating rotation via `Mathf.Atan2`, prevent the maze from "snapping" to the absolute touch angle. Calculate and store the initial angle offset during `TouchPhase.Began` (or `GetMouseButtonDown`), and only apply the delta angle during `TouchPhase.Moved` (or `GetMouseButton`).
+   - **Smooth Rotation Input**: When calculating rotation via `Mathf.Atan2`, prevent the maze from "snapping" to the absolute touch angle. Calculate and store the initial angle offset when `TouchPhase.Began` (EnhancedTouch) or `mouse.leftButton.wasPressedThisFrame`, and only apply the delta angle during `TouchPhase.Moved` / `mouse.leftButton.isPressed`.
 - Documentation: Always refer to `Docs/GDD.md` for detailed mechanics, stage data, and UI flows when implementing features.
 
 # Unity MCP (Model Context Protocol) Integration
@@ -56,4 +81,4 @@ Before starting any implementation (e.g., tasks from `Task.md`), you MUST strict
 4. Inspector References (Crucial): If a script requires component references (e.g., a `[SerializeField]` needing another GameObject/Component), attempt to link them via MCP. If the MCP tool cannot assign object references, you MUST explicitly and clearly instruct the user to link them manually in the Unity Inspector.
 5. Safety & Logging:
    - Before executing destructive or large-scale structural changes in the Scene, briefly advise the user to save the scene manually.
-   - [IMPORTANT] ALWAYS document any Scene, GameObject, or Component changes made via MCP into the `Docs/DevelopLog.md` file (create it if it doesn't exist) to maintain a clear history of automated modifications.
+   - [IMPORTANT] ALWAYS document any Scene, GameObject, or Component changes made via MCP into the `DevelopLog.md` file at the project root to maintain a clear history of automated modifications.
