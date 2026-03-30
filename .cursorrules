@@ -11,7 +11,7 @@ Before starting any implementation (e.g., tasks from `Task.md`), you MUST strict
 3. **Execute**: Only proceed with actual code writing or MCP Scene modifications after the user has confirmed and approved the plan.
 
 # Tech Stack
-- Engine: Unity 6 (2023.3+)
+- Engine: Unity 6 (6000.3.9f1)
 - Language: C#
 - Physics: Box2D (Unity 2D Physics)
 - Target Platform: Mobile (iOS / Android)
@@ -21,7 +21,7 @@ Before starting any implementation (e.g., tasks from `Task.md`), you MUST strict
    - No Allocations in Hot Paths: NEVER use the `new` keyword, string concatenation (e.g., `str + str`), or allocate arrays inside `Update()`, `FixedUpdate()`, or `LateUpdate()`.
    - NO LINQ: NEVER use LINQ (`Where`, `ToList`, etc.) in functions called every frame to avoid performance drops and GC.
    - Coroutine Yield Caching: Inside an `IEnumerator` loop (`while`, `for`), NEVER allocate `yield return new WaitForSeconds(time);` repeatedly. Always cache it outside the loop (e.g., `var wait = new WaitForSeconds(time);`) and reuse it.
-   - Mandatory Object Pooling: For objects frequently spawned/destroyed (bullets, particles, enemies), DO NOT use `Instantiate()` and `Destroy()`. You MUST use Unity's built-in `UnityEngine.Pool.ObjectPool<T>`.
+   - Mandatory Object Pooling: For objects frequently spawned/destroyed (bullets, particles, enemies), DO NOT use `Instantiate()` and `Destroy()`. You MUST use Unity's built-in `UnityEngine.Pool.ObjectPool<T>` via a centralized **`PoolManager`** to minimize GC.
 
 2. Reference, Event Management & Memory Leak Prevention:
    - No Runtime Searching: NEVER call `GetComponent<T>()`, `GameObject.Find()`, or `FindObjectOfType()` inside `Update()`. Always cache them in `Awake()` or `Start()` into global variables.
@@ -32,7 +32,8 @@ Before starting any implementation (e.g., tasks from `Task.md`), you MUST strict
 3. Physics Engine Rules:
    - Isolate Physics Logic: Logic involving adding forces (`AddForce`) or physics-based movement MUST be written in **`FixedUpdate()`**, not `Update()`.
    - Fixed Delta Time: When applying continuous value changes (like `Lerp`) inside `FixedUpdate()`, you MUST use **`Time.fixedDeltaTime`** instead of `Time.deltaTime`.
-   - Do NOT Manipulate Transform Directly: When manipulating physics objects (`Rigidbody`/`Rigidbody2D`), NEVER use `transform.position` or `transform.Rotate`. Always use **`Rigidbody.MovePosition()`** and **`Rigidbody.MoveRotation()`**.
+   - Do NOT Manipulate Transform Directly: When manipulating physics objects (`Rigidbody`/`Rigidbody2D`), NEVER use `transform.position` or `transform.Rotate`. Always use **`Rigidbody.MovePosition()`** and **`Rigidbody.MoveRotation()`**. (Note: For the **Maze** specifically, it is **Static** and remains at `(0,0,0)`. Do NOT move it; only rotate `Physics2D.gravity` and the Camera).
+   - **OOB Deadzone (Kill Z)**: To prevent soft-locks caused by physics tunneling, ALWAYS place a large trigger collider (IsTrigger=true) surrounding the entire maze. Any ball entering or exiting this Deadzone must trigger a "Fast Retry" immediately.
 
 4. UI (uGUI) Optimization:
    - Disable Raycast Target: For background images or text components that don't need interaction, you MUST turn off the **`Raycast Target`** option (`false`) to reduce UI calculation overhead.
@@ -48,8 +49,9 @@ Before starting any implementation (e.g., tasks from `Task.md`), you MUST strict
 
 # Project Specific Rules (Labyrinth - 2D Rotating Maze)
 1. Ball Physics & Tunneling Prevention:
-   - The Ball MUST be purely driven by Unity's physics engine gravity (`gravityScale = 1`). Do NOT write code to add force/torque to move it.
+   - The Ball MUST be purely driven by Unity's physics engine gravity. Tune `gravityScale` for snappy falling (typically **1.0 to 1.5**, matching GDD). Do NOT write code to add force/torque to move it.
    - ALWAYS set the Ball's `Rigidbody2D.collisionDetectionMode` to `Continuous` to prevent tunneling through thin maze walls at high rotation speeds. Ensure it is set to `Interpolate` for smooth rendering.
+   - **Ball Disposal**: Once a ball enters the Goal, immediately **Disable** the ball object (or return to pool) to stop physics calculations and prevent it from obstructing other balls in multi-ball scenarios.
    - Do NOT write scripts for physics bounce/friction or layer-based collision ignoring. Leave comments/logs reminding the developer to use Physics Material 2D and Layer Collision Matrix in the Unity Editor.
    - **Project Settings Reminder**: Increase "Velocity Iterations" and "Position Iterations" (e.g., to 8 and 4, or higher) in `Edit > Project Settings > Physics 2D` if needed.
 2. Input System & UI Touch Guard:
@@ -57,7 +59,9 @@ Before starting any implementation (e.g., tasks from `Task.md`), you MUST strict
    - **Crucial UI Guard**: When implementing touch/mouse input, ALWAYS check `UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject()` first. For enhanced touch, pass the `touch.finger.index`. If true, ignore the input to prevent rotating the maze when tapping UI buttons.
    - Separate Input logic from Physics logic (e.g., `InputController` explicitly sets the target angle on `MazeRotator` rather than mixing coordinate generation with physics updates).
 3. State Management & Mobile Handling:
-   - **Fast Retry Implementation**: For restarting a level upon failure, do NOT use `SceneManager.LoadScene()`. Instead, reset the `Transform` (position, rotation) and `Rigidbody2D` (velocity, angularVelocity to 0) of the Ball and Maze to their cached initial states.
+    - **Fast Retry Implementation**: For restarting a level upon failure, do NOT use `SceneManager.LoadScene()`. Instead, reset the Ball's `Transform` and `Rigidbody2D` (**`velocity = Vector2.zero`**, `angularVelocity = 0`). For the Maze (Method B), reset the `WorldRotationController`'s target angle and `Physics2D.gravity` to their initial values, as the Maze Transform is fixed at `(0,0,0)`.
+    - **Advanced Level Geometry (Sprite Shape)**: For organic or curved maze paths, use **2D Sprite Shape**. All static geometry MUST have its local collider (Edge/Polygon) marked as **`Used By Composite`** to merge with the `Maze` root's `CompositeCollider2D`.
+    - **Dynamic Gimmicks Separation**: DO NOT merge dynamic gimmicks (moving doors, fragile blocks) into the `CompositeCollider2D`. Keep them as independent colliders to avoid expensive runtime collider rebuilding (Lag Spikes).
    - **Mobile Focus/Pause Handling**: Strictly implement `OnApplicationPause(bool isPaused)` in the `GameManager`. If the game goes to the background, automatically set the state to Pause, freeze the physics simulation (`Time.timeScale = 0`), and show the Pause UI.
    - **Mobile Initialization**: In `GameManager` or `Bootstrapper`'s `Awake()`, enforce:
      `Application.targetFrameRate = 60;` (or 120)
@@ -72,7 +76,7 @@ Before starting any implementation (e.g., tasks from `Task.md`), you MUST strict
 - Primary Goal: Tilt or rotate the maze to guide the ball to the goal solely via gravity.
 - Coordinate System: Convert screen touch position to world point, calculate delta angle (`Mathf.Atan2`) from the maze center, and apply rotation smoothly.
    - **Smooth Rotation Input**: When calculating rotation via `Mathf.Atan2`, prevent the maze from "snapping" to the absolute touch angle. Calculate and store the initial angle offset when `TouchPhase.Began` (EnhancedTouch) or `mouse.leftButton.wasPressedThisFrame`, and only apply the delta angle during `TouchPhase.Moved` / `mouse.leftButton.isPressed`.
-- Documentation: Always refer to `Docs/GDD.md` for detailed mechanics, stage data, and UI flows when implementing features.
+- Documentation: Always refer to `GDD.md` for detailed mechanics, stage data, and UI flows when implementing features.
 
 # Unity MCP (Model Context Protocol) Integration
 1. Active Tooling: This project uses MCP for Unity (Transport: Stdio, Port: 6400). You MUST actively use the provided tools (`mcp_unityMCP_manage_gameobject`, `mcp_unityMCP_manage_components`, `mcp_unityMCP_manage_scene`, etc.) to manipulate the Unity Editor directly instead of just providing code.

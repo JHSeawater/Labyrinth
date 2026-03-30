@@ -8,6 +8,77 @@
 
 ---
 
+### 📅 [2026-03-30] 프로젝트 설정 최적화: .gitignore 업데이트 및 환경 정리
+
+* **작업 배경**: Unity 6 버전 대응 및 로컬 개발 환경(.vscode, .unity 등)의 불필요한 파일이 저장소에 추적되는 것을 방지하기 위한 설정 최적화.
+* **주요 작업 내용**:
+  * **Unity 6 대응**: `BurstCache/`, `GraphVisualization/` 등 최신 캐시 폴더 추가.
+  * **로컬 환경 격리**: 프로젝트 루트의 `.vscode/`, `.unity/`, `.idea/` 폴더를 무시하도록 설정하여 개인별 설정 충돌 방지.
+  * **시스템 파일 제거**: `.DS_Store`, `Thumbs.db` 등 OS 생성 찌꺼기 파일 차단 목록 강화.
+  * **백업 폴더 관리**: `/[Bb]ackup/`, `/[Bb]ackups/` 패턴 추가.
+* **해결된 이슈**: 로컬 도구 설정 파일이 Git 저장소에 포함되어 발생할 수 있는 팀원 간 설정 충돌 및 리포지토리 크기 비대화 예방.
+
+---
+
+### 📅 [2026-03-30] 최종 피드백 반영: OOB 데드존 및 오브젝트 풀링 설계 완료
+
+* **작업 배경**: 물리 엔진 한계로 인한 소프트락 방지 및 빈번한 재시작 환경에서의 모바일 성능 최적화 전략 수립.
+* **주요 작업 내용**:
+  * **데드존(Dead Zone) 도입**: 미로 외곽에 거대 트리거를 배치하여 공이 벽을 뚫고 이탈할 경우 즉시 실패(Fast Retry)로 처리하는 '방어적 물리 설계' 반영.
+  * **오브젝트 풀링(Object Pooling) 명문화**: 파티클 및 SFX 시스템에 생성/파괴 대신 비활성화/활성화 방식을 채택하여 GC 부하 최소화 및 60FPS 안정성 확보.
+  * **아키텍처 확장**: `PoolManager`를 핵심 매니저 그룹에 추가하여 전역적인 리소스 재사용 기반 마련.
+* **해결된 이슈**: 희박한 확률로 발생하는 장외 이탈 버그 대응 및 반복 플레이 시 발생하는 성능 저하 예방.
+
+---
+
+### 📅 [2026-03-30] GDD 주요 피드백 반영 및 아키텍처 가이드라인 수립
+
+
+* **작업 배경**: 외부 피드백을 통해 식별된 물리 엔진 성능 이슈(CompositeCollider 런타임 Rebuild), 카메라 클리핑, 재시작 시 물리 잔존력 버그 등을 사전에 방어하기 위한 문서 최적화.
+* **주요 작업 내용**:
+  * **물리 최적화**: 문, 파괴 블록 등 동적 기믹은 `CompositeCollider2D` 병합에서 제외하도록 명시 (런타임 렉 방지).
+  * **카메라 로직 개선**: 회전 시 모서리 잘림 방지를 위해 '미로 대각선 외접원' 기준으로 `orthographicSize`를 설정하는 수식 도입 반영.
+  * **승리 조건 정교화**: 먼저 골인한 공은 즉시 `Disable` 처리하여 물리 부하 감소 및 다른 공의 경로 방해 차단.
+  * **Fast Retry 안정성**: 재시작 시 `velocity`, `angularVelocity`를 `0`으로 강제 초기화하도록 태스크 구체화.
+* **해결된 이슈**: 대규모 맵이나 복잡한 기믹 추가 시 발생할 수 있는 성능 저차 및 물리 버그를 아키텍처 레벨에서 차단.
+
+---
+
+### 📅 [2026-03-30] 레벨 제작 도구 확장 기획 및 문서 업데이트 (Advanced Geometry)
+
+
+* **작업 배경**: 기존 정사각형 타일맵 방식의 단조로움을 탈피하고곡선, 대각선 등 정교한 레벨 디자인을 가능하게 하기 위한 기술적 검토 및 기획 내용 반영.
+* **주요 작업 내용**:
+  * **GDD 업데이트**: 2D SpriteShape 도입 명문화 및 CompositeCollider2D 병합을 통한 '물리 매터리얼 일괄 제어' 이점 추가.
+  * **Task 업데이트**: Phase 4를 '레벨 제작 고도화'로 구체화하여 SpriteShape 패키지 설치 및 검증 단계를 세부 항목으로 분리.
+  * **아키텍처 가이드**: 비정형 콜라이더 사용 시 `Used By Composite` 옵션 활성화 및 `Maze` 루트 자식 배치 규칙 수립.
+* **해결된 이슈**: 레벨 디자이너가 물리 설정을 일일이 수정하지 않고도 전체 맵의 물리 속성을 한 번에 관리할 수 있는 워크플로우 확립.
+
+---
+
+### 📅 [2026-03-29] [정기 점검] 프로젝트 문서 논리적 정렬 및 동기화 (Sync)
+
+
+* **작업 배경**: Phase 1.5 아키텍처 변경(B-Mode) 및 입력 시스템 마이그레이션 이후, 구버전 정보가 남은 문서(`README`, `GDD`)들을 최신화하여 AI 개발 컨텍스트의 일관성을 확보함.
+* **주요 작업 내용**:
+  * **Input System**: `README.md` 및 `GDD.md`에서 Legacy Input Manager 참조를 모두 삭제하고 `New Input System (EnhancedTouch)`으로 업데이트.
+  * **Physics Rules**: `.cursorrules`에서 공의 `gravityScale` 조정 허용(GDD 조작감 대응) 및 미로의 `Static` 속성(B-Mode)을 명문화하여 `MoveRotation()` 등 구버전 조작 방식의 오남용 차단.
+  * **Path Fixes**: `.cursorrules` 내 `GDD.md` 참조 경로 오류 수정 (Root 경로).
+* **해결된 이슈**: AI가 구버전 문서를 보고 잘못된 물리 연산이나 입력 API를 작성할 위험을 원천 제거함.
+
+---
+
+### 📅 [2026-03-29] Phase 1.5: 씬 클린업 및 리팩토링 최종 검증
+
+* **작업 내용**:
+  * `Maze` 오브젝트: `Rigidbody2D`를 `Static`으로 변경하여 `CompositeCollider2D` 기능을 유지하면서 표면 속도 버그 원천 차단 (B방식 최적화).
+  * `InputManager`: `InputController` → `WorldRotationController` 인스펙터 레퍼런스 연결 완료.
+  * `WorldRotationController`: `Main Camera`의 `CameraController` 레퍼런스 연결 완료.
+  * 모든 핵심 스크립트 변수 캡슐화(`[SerializeField] private`) 및 참조 안전성 검증 완료.
+* **해결된 이슈**: 씬 리셋 시 참조 누락 방지 및 물리 엔진 안정성 완벽 확보.
+
+---
+
 ### 📅 [2026-03-27] Phase 1.5: 물리 아키텍처 리팩토링 (카메라 착시 방식)
 
 * **배경 및 원인**: 기존 Kinematic `Rigidbody2D.MoveRotation()` 방식에서 Box2D의 **표면 속도 전달(Surface Velocity Transfer)** 버그 발견. 빠른 회전 시 공이 의도치 않게 튀어오르는 현상 발생. `Continuous`, 속도 클램핑으로 근본 해결 불가.
@@ -20,7 +91,6 @@
   * `CameraController.cs` [수정]: `SetWorldRotation(float angle)` 메서드 추가, `LateUpdate()`에서 카메라 역회전 적용.
   * `InputController.cs` [수정]: `MazeRotator` → `WorldRotationController` 참조 교체, 개발 임시 진단 로그 삭제.
   * `GDD.md` [수정]: 7장 아키텍처 원칙을 B방식으로 업데이트, 3장 조작 방식 설명 보완.
-* **MCP 씬 변경**: `Maze` 오브젝트에서 `Rigidbody2D` 및 `MazeRotator` 컴포넌트 제거. `InputManager`에 `WorldRotationController` 추가 및 `CameraController` 레퍼런스 연결. 씬 저장 완료.
 * **주의 사항 (QA 필수)**:
   * ⚠️ UI Canvas의 Render Mode가 **`Screen Space - Overlay`** 인지 반드시 확인 (Camera 회전 시 HUD 같이 돌아가는 버그 방지).
   * ⚠️ 배경에 이미지/스프라이트가 있다면 해당 오브젝트를 **Main Camera의 자식**으로 이동해야 착시 유지됨 (현재 단색 배경이면 불필요).

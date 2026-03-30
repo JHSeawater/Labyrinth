@@ -10,6 +10,8 @@
 /[Bb]uilds/
 /[Ll]ogs/
 /[Uu]ser[Ss]ettings/
+/[Bb]urstCache/
+/[Gg]raphVisualization/
 *.log
 
 # By default unity supports Blender asset imports, *.blend1 blender files do not need to be commited to version control.
@@ -33,6 +35,11 @@
 
 # Visual Studio cache directory
 .vs/
+
+# IDE and editor specific folders
+.[Vv]scode/
+.[Ii]dea/
+.[Uu]nity/
 
 # Gradle cache directory
 .gradle/
@@ -62,6 +69,18 @@ ExportedObj/
 
 # Unity3D generated file on crash reports
 sysinfo.txt
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._[_.]*
+[Tt]humbs.db
+[Ee]hthumbs.db
+[Dd]esktop.ini
+
+# Backups
+/[Bb]ackup/
+/[Bb]ackups/
 
 # Mono auto generated files
 mono_crash.*
