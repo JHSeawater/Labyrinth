@@ -8,6 +8,39 @@
 
 ---
 
+### 📅 [2026-03-30] Phase 4: 구조 확장 (레벨 데이터 모델링) 및 Jitter 물리 최적화
+
+* **작업 내용**:
+  * **핵심 물리 최적화**: `PlayerBall.cs`에서 `FastRetry()` 수행 시 Transform 할당으로 인해 발생하는 Box2D Spatial Hash 트리 리빌딩 미세 튀는 현상(Jitter)을 방지하기 위해, `_rb.position`과 `_rb.rotation` API를 직접 할당하는 방식으로 마이그레이션 적용. (유저 피드백 수용 완료)
+  * **데이터 아키텍처 모델링**: 스테이지 레벨 번호 및 별점 컷오프 타임(15초 3별 등)을 하드코딩하지 않고 관리하기 위해 `ScriptableObject` 상속 객체 `StageData.cs` 인프라 신설.
+  * **전역 타이머 로직**: `GameManager.cs`에 인게임 플레이 타이머(`_playTimer`) 및 `CalculateStars()` 메소드를 구축하여 Clear 진입 시 콘솔에 획득 별점을 로깅하도록 작성.
+* **해결된 이슈**: 확장성 없는 하드코딩된 기획 수치를 독립된 데이터 분리 구조로 탈바꿈하고 물리 엔진 위치 동기화를 완벽하게 보장함.
+
+---
+
+### 📅 [2026-03-30] Phase 3: 다중 색상 공 기믹 및 다중 골 판정 구현 완료
+
+* **작업 내용**:
+  * **자율적 공 상태 제어 (`PlayerBall.cs`)**: 여러 개의 공이 존재할 수 있도록, 각 공이 자신의 고유 색상(`ColorType`), 초기 위치, 리셋 로직(`FastReset`)을 스스로 책임지도록 설계 및 컴포넌트 신설.
+  * **`GameManager` 병렬 클리어 판정**: 씬에 존재하는 공의 갯수(`TotalBallsCount`)를 추적하고, 조건이 일치하는 골에 들어간 공의 갯수(`ReachedBallsCount`)가 똑같아질 때만 씬 클리어 코루틴을 돌리도록 통계 로직 개편.
+  * **게이트 물리 튕겨냄 (`Goal.cs` 변경)**: 기존 `OnTriggerEnter2D`를 `OnCollisionEnter2D` 방식으로 전환하여 색상이 불일치할 경우 퍼즐의 벽처럼 물리 반발력을 유지하도록 구조 개선.
+* **해결된 이슈**: 1개의 공만 추적하던 하드코딩된 로직을 벗어나 확장성 있는 다중 공 처리의 기반을 성공적으로 마련함. (유니티 Collision Matrix 튜닝은 에디터 수동 설정 가이드로 제공)
+
+---
+
+### 📅 [2026-03-30] Phase 2: 인게임 핵심 로직 및 Fast Retry 구현 (코드 작성 완료)
+
+* **작업 내용**:
+  * **상태 제어 (GameManager.cs)**: `GameState` 정의 및 코루틴(1.5초 딜레이) 기반의 클리어 이벤트 처리. 물리 상태(Velocity)와 Transform을 0으로 강제 복원하는 `FastRetry()` 무한 루프 구현 완료.
+  * **피드백 시스템 (FeedbackManager.cs)**: `0.1초 쿨타임`이 강제된 `PlayHaptic(intensity)` 인터페이스 구축.
+  * **환경 오브젝트**: `Goal.cs`(활성화 제어 및 이벤트 우선순위 처리), `DeadZone.cs`(장외 이탈 방지), `Obstacle.cs` 트리거 방어 완료.
+  * **핵심 매니저 초기화 보완**:
+    * `WorldRotationController.FastReset()`: 다음 프레임 보간(Lerp) 연산을 차단하기 위해 `_targetAngle = 0`, `_currentAngle = 0` 동시 대입 후 `ApplyGravity(0)` 강제.
+    * `InputController.ResetInput()`: 에디터/마우스 로직의 영구 무시 버그를 차단하기 위해 `_isUsingTouch = false` 초기화.
+* **해결된 이슈**: 씬 재로드(LoadScene) 없이도 메모리 누출이나 오작동(버그) 없이 즉각 처음 상태로 복원되는 Zero-Overhead 재시작 모델 안착.
+
+---
+
 ### 📅 [2026-03-30] 프로젝트 설정 최적화: .gitignore 업데이트 및 환경 정리
 
 * **작업 배경**: Unity 6 버전 대응 및 로컬 개발 환경(.vscode, .unity 등)의 불필요한 파일이 저장소에 추적되는 것을 방지하기 위한 설정 최적화.

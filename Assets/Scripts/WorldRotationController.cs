@@ -90,4 +90,20 @@ public class WorldRotationController : MonoBehaviour
         _gravityVector.y = -Mathf.Cos(rad) * gravMag;
         Physics2D.gravity = _gravityVector;
     }
+
+    /// <summary>
+    /// 패스트 리트라이 시점의 다음 프레임 보간(Lerp) 개입을 차단하고 
+    /// 즉시 타겟/현재 각도와 중력을 화면 최초 좌표(0도)로 복원합니다.
+    /// </summary>
+    public void FastReset()
+    {
+        _targetAngle = 0f;
+        _currentAngle = 0f;
+        ApplyGravity(0f);
+
+        if (cameraController != null)
+        {
+            cameraController.SetWorldRotation(0f);
+        }
+    }
 }

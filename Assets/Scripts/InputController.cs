@@ -120,4 +120,18 @@ public class InputController : MonoBehaviour
         Vector2 dir = screenPos - center;
         return Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg;
     }
+
+    /// <summary>
+    /// Fast Retry 로직 호출 시 
+    /// 에디터(마우스) 환경 버그 방지 및 모든 드래그 변수를 초기화합니다.
+    /// </summary>
+    public void ResetInput()
+    {
+        _isUsingTouch = false;
+        _isDragging = false;
+        _currentTouchId = -1;
+        _initialTouchAngle = 0f;
+        _initialWorldAngle = 0f;
+    }
 }
+
