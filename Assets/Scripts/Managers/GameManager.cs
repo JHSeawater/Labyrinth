@@ -34,6 +34,11 @@ public class GameManager : MonoBehaviour
         _clearDelayCache = new WaitForSeconds(CLEAR_DELAY_TIME);
     }
 
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
+    }
+
     private void Update()
     {
         if (CurrentState == GameState.Play)
@@ -91,6 +96,7 @@ public class GameManager : MonoBehaviour
 
     public void FastRetry()
     {
+        StopAllCoroutines();
         CurrentState = GameState.Play;
         _reachedBallsCount = 0;
         _playTimer = 0f;

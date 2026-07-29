@@ -106,4 +106,9 @@ public class WorldRotationController : MonoBehaviour
             cameraController.SetWorldRotation(0f);
         }
     }
+
+    private void OnDestroy()
+    {
+        Physics2D.gravity = new Vector2(0f, -9.81f);
+    }
 }

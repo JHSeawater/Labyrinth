@@ -15,6 +15,11 @@ public class FeedbackManager : MonoBehaviour
             Destroy(gameObject);
     }
 
+    private void OnDestroy()
+    {
+        if (Instance == this) Instance = null;
+    }
+
     public void PlayHaptic(float intensity)
     {
         if (Time.time - _lastFeedbackTime < FEEDBACK_COOLDOWN)
