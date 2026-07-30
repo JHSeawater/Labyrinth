@@ -1,7 +1,7 @@
 # 프로젝트 작업 목록 (Task List)
 
 > 기획 근거는 `GDD.md`, 구현 스펙은 `TDD.md`, 작업 규칙·아키텍처는 `CLAUDE.md`. 작업 완료 시 체크박스(`[x]`) 갱신.
-> 현재 진척: **Phase 1~3 완료**, Phase 3.5~ 진행 예정.
+> 현재 진척: **Phase 1~3 완료**, Phase 4 대부분 완료(잔여: 곡선 미로 형상 저작), Phase 3.5 QA 진행 중.
 
 ## Phase 1: 기본 물리 및 조작 프로토타입
 - [x] **프로젝트 세팅**: 모바일 타겟 프레임(60) 설정 및 화면 꺼짐 방지 (Bootstrapper.cs 구현 완료)
@@ -40,10 +40,10 @@
 - [ ] **[QA] 검증**: 멀티볼 레벨에서 공끼리 부딪히고 밀리는 동작(✅ 확인) 및 **좁은 통로 교착(끼임) 여부**(⚠️ 인터랙티브 플레이테스트 필요) 점검
 
 ## Phase 4: 구조 확장 및 레벨 제작 고도화 (Advanced Level Design)
-- [ ] **데이터 모델링**: ScriptableObject 기반의 스테이지 데이터(제한 시간, 획득 별점 기준 등) 로드 시스템 구현
-- [ ] **2D SpriteShape 도입**: Package Manager를 통한 패키지 설치 및 기본 벽면 프로필(Profile) 구축
-- [ ] **정밀 기하 구조 테스트**: SpriteShape와 PolygonCollider2D를 활용한 곡선/대각형 미로 테스트 씬 구성 및 **동적 기믹의 독립 콜라이더 워크플로우(Used By Composite 미사용) 검증**
-- [ ] **병합 가이드 준수**: 모든 비정형 콜라이더의 'Used By Composite' 활성화 및 Maze 루트 자식 배치 규칙 수립
+- [x] **데이터 모델링**: ScriptableObject 기반의 스테이지 데이터(제한 시간, 획득 별점 기준 등) 로드 시스템 구현 — `Assets/Data/Stage 1.asset` 생성 및 `GameManager._currentStageData` 배선 완료(`CalculateStars()` 동작). 다중 스테이지 레지스트리/`StageLoader`는 로비가 생기는 Phase 5로 이월
+- [x] **2D SpriteShape 도입**: `com.unity.2d.spriteshape 13.0.0` 설치 확인, 벽면 프로필을 `Assets/SpriteShapes/Sprite Shape Profile.asset`으로 정규화(구 위치 `Assets/Prefabs/`)
+- [ ] **정밀 기하 구조 테스트**: (2026-07-30) **동적 기믹 독립 콜라이더 워크플로우 검증 완료** — Maze 자식 + `Used By Composite` 미사용 시 Composite `shapeCount` 불변 확인, 추가로 **자체 Kinematic `Rigidbody2D` 필수** 조건 발견(TDD §6). 남은 작업: **곡선/대각형 실제 미로 형상 저작**(스플라인 포인트 편집 — 에디터 수작업)
+- [x] **병합 가이드 준수**: 모든 비정형 콜라이더의 'Used By Composite' 활성화 및 Maze 루트 자식 배치 규칙 수립 — `MazeGrid/Maze/Wall_SpriteShape_01`에 적용·실측 검증(`shapeCount` 15→16, `pathCount` 2→3, `pointCount` 32→37)
 
 
 ## Phase 5: 메타 게임 및 UI 플로우 (UI & Meta)

@@ -7,8 +7,8 @@ Project: Labyrinth (2D Rotating Maze)
 
 | 항목 | 값 |
 |---|---|
-| 버전 | v1.0 (GDD 분리 신설) |
-| 최종 수정 | 2026-06-29 |
+| 버전 | v1.1 |
+| 최종 수정 | 2026-07-30 |
 | 엔진 | Unity 6 (6000.3.9f1) · URP 2D |
 | 플랫폼 | Mobile (iOS / Android), TargetFrameRate 60+ |
 | 입력 | New Input System (EnhancedTouch) |
@@ -18,6 +18,8 @@ Project: Labyrinth (2D Rotating Maze)
 | 날짜 | 버전 | 내용 |
 |---|---|---|
 | 2026-06-29 | v1.0 | GDD에서 기술/구현 영역을 분리해 신설. 코드 기준으로 B방식 수식·Fast Retry 범위·DeadZone 판정·레이어 정책 정정. |
+| 2026-07-06 | v1.0.1 | §5.2 색 시스템 구현 방식을 **역할 분담형 하이브리드**(게이트=레이어 / Goal=코드)로 확정, 게이트 방향·레이어 예산 기록. |
+| 2026-07-30 | v1.1 | Phase 4 실측 반영: §6.1 SpriteShape 병합 절차·검증 지표, §6.2 동적 기믹 **자체 Kinematic Rigidbody2D 필수** 신규 발견, §10 StageData 로드 경로 명시, 부록 체크리스트 2항 추가. |
 
 ---
 
@@ -122,6 +124,26 @@ Project: Labyrinth (2D Rotating Maze)
 * **콜라이더 병합**: 모든 **정적** 콜라이더(Tilemap / SpriteShape / Polygon)는 최상위 `Maze`의 **`CompositeCollider2D`에 병합**(`Used By Composite` 체크). → 공이 이음매 없이 부드럽게 구르고, **단일 `Physics Material 2D`** 로 전체 맵 마찰·반발을 일괄 제어.
 * **동적 기믹은 절대 병합 금지**: 문(Door)·파괴 블록 등 런타임에 상태가 변/파괴되는 기믹은 `Used By Composite`에 넣지 않는다(런타임 Collider Rebuild로 인한 Lag Spike 방지). 독립 `BoxCollider2D` 등을 사용.
 
+### 6.1 SpriteShape 병합 절차 — **실측 검증됨 (2026-07-30)**
+
+씬 `SampleScene`의 `MazeGrid/Maze`(Static RB + `CompositeCollider2D`, `geometryType = Polygons`)에서 확인한 순서:
+
+1. SpriteShape 오브젝트를 **`Maze`의 자식**으로 둔다(부모의 Rigidbody2D에 콜라이더가 귀속되어야 병합 대상이 된다).
+2. **스플라인을 닫는다**(`isOpenEnded = false`). 닫힌 스플라인은 `PolygonCollider2D`, 열린 스플라인은 `EdgeCollider2D`로 베이크되는데 **`Polygons` 지오메트리 Composite는 Polygon만 병합**한다.
+3. `PolygonCollider2D`를 추가한다. `SpriteShapeController.autoUpdateCollider = true`면 스플라인이 콜라이더 `points`로 자동 베이크되고 `hasCollider`가 `true`가 된다.
+4. 콜라이더의 `Used By Composite`(= `compositeOperation = Merge`)를 켠다.
+5. 자식 콜라이더에는 **`Physics Material 2D`를 할당하지 않는다**(`sharedMaterial = null`). 마찰·반발은 Composite에 걸린 단일 `Wall Physics Material`이 일괄 지배한다.
+
+* **검증 지표(성공 판정)**: 병합 성공 시 `Maze.CompositeCollider2D`의 `shapeCount` **15 → 16**, `pathCount` **2 → 3**, `pointCount` **32 → 37**로 증가하고 `bounds`가 해당 도형을 포함하도록 확장된다. 자식 콜라이더는 `compositeCapable = true`, `attachedRigidbody = Maze`가 된다.
+* ⚠️ **`Assets/Prefabs/`에 두지 말 것**: SpriteShape 프로필은 `Assets/SpriteShapes/`에 둔다(2026-07-30 정규화).
+
+### 6.2 동적 기믹 콜라이더 규칙 — **실측 검증됨 (2026-07-30)**
+
+* `Maze` 자식 + `Used By Composite` **미사용**이면 Composite `shapeCount`는 **불변**(16 유지)이고, 해당 콜라이더는 자체 `shapeCount = 1`의 독립 도형으로 남는다. → 병합 회피는 의도대로 동작한다.
+* ⚠️ **단, 이것만으로는 부족하다 (신규 발견)**: `Used By Composite`를 꺼도 자식 콜라이더의 `attachedRigidbody`는 여전히 **부모 `Maze`의 Static 바디**로 잡힌다. 이 상태로 문을 움직이면 **Static 바디의 콜라이더가 변형되어 Static Collider Rebuild가 발생** — 병합을 피한 목적 자체가 무산된다.
+* **필수 조건**: 동적 기믹에는 **자체 `Rigidbody2D`(Body Type = `Kinematic`)** 를 붙인다. 붙이는 즉시 `attachedRigidbody`가 자기 자신으로, `composite`가 `null`로 분리되는 것을 확인했다.
+* **정리 — 동적 기믹 3종 세트**: ① 독립 콜라이더(`Used By Composite` 미체크), ② 자체 `Rigidbody2D` = `Kinematic`, ③ Fast Retry 시 상태 복원(§7.5).
+
 ---
 
 ## 7. 게임 상태 & Fast Retry (State Management)
@@ -197,6 +219,8 @@ Project: Labyrinth (2D Rotating Maze)
 > 관련 파일: `Assets/Scripts/Data/StageData.cs`
 
 * **스테이지 데이터(`StageData : ScriptableObject`)**: `LevelID`, `TimeLimitFor3Stars`(기본 15s), `TimeLimitFor2Stars`(기본 30s). 별점은 `GameManager.CalculateStars()`가 `_playTimer`와 비교해 산출(이하 3별 / 2별 / 그 외 1별). 메뉴: `Labyrinth/StageData`.
+  * **현재 로드 경로(2026-07-30)**: 인스턴스 `Assets/Data/Stage 1.asset`(LevelID 1 / 15s / 30s)을 `GameManager._currentStageData`에 **인스펙터 주입**한다. 1씬 = 1스테이지 구조이므로 이것이 곧 로드 시스템이다. `_currentStageData`가 `null`이면 `CalculateStars()`는 **무조건 1별**을 반환하므로(무음 폴백) 씬 셋업 시 참조 연결을 반드시 확인할 것.
+  * **확장 시점**: 스테이지 목록·해금 상태를 다루는 레지스트리/`StageLoader`는 로비·월드맵이 생기는 **Phase 5**에서 도입한다. 그 전에 만들면 사용처 없는 추상화가 된다.
 * **세이브 데이터**: 별 기록·클리어 타임·해금 진행·보유 화폐·구매 스킨을 로컬(PlayerPrefs 또는 JSON)에 저장. **[구현 예정]**
   * 스키마 버전 필드 포함(마이그레이션 대비), 간단 암호화/체크섬으로 변조 방지.
   * 별(성취 기록)과 소프트 화폐는 **별도 필드**로 저장(분리 근거는 GDD §7).
@@ -231,6 +255,8 @@ Project: Labyrinth (2D Rotating Maze)
 
 - [ ] `Maze` 루트 `Rigidbody2D` = **Static**, Transform = `(0,0,0)`.
 - [ ] 정적 지형 콜라이더 전부 `Used By Composite` 체크, 동적 기믹은 **미체크**.
+- [ ] SpriteShape 지형: `Maze` 자식 배치 + **스플라인 닫힘** + `PolygonCollider2D` + `Used By Composite` 체크 + 자체 머티리얼 **미할당** (§6.1).
+- [ ] 동적 기믹: 독립 콜라이더 + **자체 `Rigidbody2D` = `Kinematic`** (§6.2 — 없으면 Static Rebuild 발생).
 - [ ] `Maze`에 단일 `Physics Material 2D` 할당(마찰/반발 일괄).
 - [ ] PlayerBall: `Continuous` + `Interpolate`, `Physics Material 2D` 할당, `ColorType` 지정.
 - [ ] **DeadZone 콜라이더가 공의 시작/플레이 영역과 겹치지 않음**(겹치면 즉시 게임오버 — §7.4).

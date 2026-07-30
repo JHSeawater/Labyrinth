@@ -8,6 +8,24 @@
 
 ---
 
+### 📅 [2026-07-30] Phase 4 — SpriteShape ↔ CompositeCollider2D 병합 파이프라인 구축 및 동적 기믹 규칙 실측 확정
+
+* **작업 배경**: Phase 4 진입 시점에 MCP로 프로젝트 상태를 감사한 결과, 문서상 미완이던 항목 상당수가 이미 되어 있었고(아래) 실제 남은 병목은 SpriteShape의 콜라이더 병합 파이프라인이었음.
+* **상태 감사 결과(문서 드리프트 정정)**: ① `StageData` 로드 — `Assets/Data/Stage 1.asset`이 이미 존재하고 `GameManager._currentStageData`에 배선되어 별점 산출이 동작 중 → **완료 처리**. ② SpriteShape 패키지 `com.unity.2d.spriteshape 13.0.0` 설치 및 프로필 에셋 존재 확인. ③ 반면 씬의 SpriteShape 오브젝트는 이름이 기본값 `GameObject`인 채 **루트에 방치**되어 있었고 `hasCollider = false`(콜라이더 자체가 없어 물리적으로 존재하지 않는 순수 그림) → 병합 불가 상태.
+* **주요 작업 내용**:
+  * **SpriteShape 정규화**: `GameObject` → `Wall_SpriteShape_01`로 개명, `MazeGrid/Maze` 자식으로 이동. `PolygonCollider2D` 추가 시 `SpriteShapeController.autoUpdateCollider`가 닫힌 스플라인을 5점 폴리곤으로 자동 베이크(`hasCollider: false → true`).
+  * **Composite 병합 실측 검증**: `Used By Composite`(`compositeOperation = Merge`) 적용 후 `Maze.CompositeCollider2D`가 `shapeCount` **15→16**, `pathCount` **2→3**, `pointCount` **32→37**, `bounds` 8×8→12.52×8로 확장됨을 확인. 자식 콜라이더는 `sharedMaterial = null`이라 Composite의 단일 `Wall Physics Material`이 그대로 지배 — 의도한 "맵 전체 마찰·반발 일괄 제어"가 성립.
+  * **동적 기믹 워크플로우 검증**: `Maze` 자식에 `Used By Composite` **미체크** 콜라이더를 배치하면 Composite `shapeCount`가 16으로 **불변**이고 자체 `shapeCount = 1`의 독립 도형으로 남는 것을 확인(검증용 프로브는 확인 후 삭제).
+  * **에셋 정리**: `Sprite Shape Profile.asset`을 `Assets/Prefabs/` → `Assets/SpriteShapes/`로 이동(GUID 보존, `SpriteShapeController`의 참조 유지 확인).
+  * **문서 동기화**: `Task.md` Phase 4의 ①②④를 `[x]`로 갱신하고 ③은 검증분/잔여분을 분리 주석. `TDD.md`를 **v1.1**로 올리며 §6.1(SpriteShape 병합 절차·검증 지표)·§6.2(동적 기믹 규칙) 신설, §10에 StageData 실제 로드 경로와 **`_currentStageData`가 `null`이면 무조건 1별을 반환하는 무음 폴백** 경고 명시, 부록 셋업 체크리스트에 2항 추가. 변경 이력 표에 누락돼 있던 2026-07-06 행도 함께 보정.
+  * **씬 저장**: 위 변경은 MCP로 수행 후 `SampleScene.unity`에 저장 완료(+75/−5).
+* **부수 관찰(미조치)**: 씬의 `EventSystem`이 **비활성** 상태다. `InputController`가 `EventSystem.current`에 null 가드를 두고 있어(53·78행) 현재는 무해하지만, **Phase 5에서 UI를 붙일 때 활성화하지 않으면 UI 터치 예외 처리(TDD §3)가 통째로 동작하지 않는다.** 지금은 UI가 없어 범위 밖으로 두고 기록만 남김.
+* **🔍 신규 발견 (TDD §6.2 반영)**: `Used By Composite`를 끄는 것만으로는 동적 기믹이 안전하지 않다. 자식 콜라이더의 `attachedRigidbody`는 여전히 **부모 `Maze`의 Static 바디**로 잡히므로, 그 상태로 문을 움직이면 결국 **Static Collider Rebuild가 발생**해 병합을 피한 목적이 무산된다. **자체 `Rigidbody2D`(Kinematic)** 를 붙이는 순간 `attachedRigidbody`가 자기 자신으로, `composite`가 `null`로 분리되는 것을 실측 확인. → 동적 기믹 3종 세트: **독립 콜라이더 + 자체 Kinematic RB + Fast Retry 상태 복원**.
+* **해결된 이슈**: SpriteShape 지형이 물리적으로 존재하지 않던 문제 해소(비정형 지형을 실제 벽으로 사용 가능해짐), Phase 4의 병합 규칙을 추측이 아닌 **수치 검증 기반**으로 확정, 동적 기믹 도입 시 잠복해 있던 Static Rebuild 함정을 사전 제거. 문서(Task/TDD)와 실제 프로젝트 상태의 드리프트 정정.
+* **남은 작업**: 곡선/대각형 미로의 **실제 형상 저작**(스플라인 포인트 편집)은 에디터 수작업 레벨 디자인 영역이라 미완으로 남김.
+
+---
+
 ### 📅 [2026-07-06] 색상 게이트 방향성 확정 & 색 시스템 구현 방식(레이어 vs 코드) 결정
 
 * **작업 배경**: Phase 3.5 점검 중 씬에 유휴 색상 레이어(`Ball_/Gate_*`)가 미배선으로 남아 있어, 색 게이트를 (a)Layer Collision Matrix로 갈지 (b)코드로 갈지 방향을 확정해야 했음. 아울러 "게이트가 같은 색을 통과시키는가/막는가"의 기획 직관 판단이 필요했음.
