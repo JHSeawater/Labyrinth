@@ -7,8 +7,8 @@ Project: Labyrinth (2D Rotating Maze)
 
 | 항목 | 값 |
 |---|---|
-| 버전 | v1.1 |
-| 최종 수정 | 2026-07-30 |
+| 버전 | v1.3 |
+| 최종 수정 | 2026-07-31 |
 | 엔진 | Unity 6 (6000.3.9f1) · URP 2D |
 | 플랫폼 | Mobile (iOS / Android), TargetFrameRate 60+ |
 | 입력 | New Input System (EnhancedTouch) |
@@ -20,6 +20,8 @@ Project: Labyrinth (2D Rotating Maze)
 | 2026-06-29 | v1.0 | GDD에서 기술/구현 영역을 분리해 신설. 코드 기준으로 B방식 수식·Fast Retry 범위·DeadZone 판정·레이어 정책 정정. |
 | 2026-07-06 | v1.0.1 | §5.2 색 시스템 구현 방식을 **역할 분담형 하이브리드**(게이트=레이어 / Goal=코드)로 확정, 게이트 방향·레이어 예산 기록. |
 | 2026-07-30 | v1.1 | Phase 4 실측 반영: §6.1 SpriteShape 병합 절차·검증 지표, §6.2 동적 기믹 **자체 Kinematic Rigidbody2D 필수** 신규 발견, §10 StageData 로드 경로 명시, 부록 체크리스트 2항 추가. |
+| 2026-07-31 | v1.2 | 씬 셋업 결함 2건 수정 반영: §7.4 DeadZone 4프레임 실제 구성(과거 미로와 분리돼 이탈 감지 무력), §9 `defaultOrthoSize ≥ R / targetAspect` 수식 확정(과거 `6` → 세로 화면 클리핑), 부록 체크리스트 2항 추가. |
+| 2026-07-31 | v1.3 | §6.1.1 신설 — `Collider Offset` 정렬 수식(`2t`, 실측표)과 리베이크 함정(`BakeMesh()` 필수). §4 공 실측 크기 정정(반지름 0.3), §5.3.1 끼임 위험 구간 기하 해석 추가. |
 
 ---
 
@@ -86,7 +88,8 @@ Project: Labyrinth (2D Rotating Maze)
 
 > 관련 파일: `Assets/Scripts/Objects/PlayerBall.cs`, 프리팹 `Assets/Prefabs/PlayerBall.prefab`
 
-* **공(Ball) Rigidbody2D**: `CollisionDetectionMode = Continuous`(터널링 방지) + `Interpolate`(렌더 부드러움). `CircleCollider2D` 반지름 0.4, 크기 ≈ 0.5~1 unit.
+* **공(Ball) Rigidbody2D**: `CollisionDetectionMode = Continuous`(터널링 방지) + `Interpolate`(렌더 부드러움).
+* **공 실측 크기 (2026-07-31 정정)**: `CircleCollider2D.radius = 0.5`, Transform `scale = 0.6` → **월드 반지름 0.3 / 지름 0.6**. (구 기술 "반지름 0.4"는 콜라이더 값과 불일치였음.) 타일 1칸 = `1.0`이므로 **공 2개 나란히 = 1.2 > 1칸**. 끼임 해석은 §5.3 참조.
 * **중력 배율**: `gravityScale`(WorldRotationController 필드, 기본 1.5)로 빠릿한 낙하감 튜닝. 실제 중력 크기 = `9.81 × gravityScale`.
 * **마찰·반발은 코드 금지** → `Physics Material 2D`로만 제어. 정적 지형은 `Maze` 루트의 단일 머티리얼로 일괄 튜닝(§6).
 * **공-공 충돌 정책**: §5.3에서 정의.
@@ -116,6 +119,20 @@ Project: Labyrinth (2D Rotating Maze)
   * 가장 단순한 방법: **모든 공을 하나의 `Ball` 레이어**에 둔다 → 공끼리는 항상 충돌. 이때 색상 게이트 통과/차단은 게이트의 충돌 콜백에서 `ColorType` enum으로 판정한다(공↔게이트 필터링을 코드로).
   * 색상별로 공 레이어를 분리(게이트 필터링을 Matrix로 처리)할 경우, **모든 공 레이어 쌍(동색·이색 포함)의 교차를 ON으로 유지**해야 공끼리 충돌이 보존된다. 색 분리를 도입하면서 공-공 교차를 끄지 않도록 주의.
 
+#### 5.3.1 끼임(Jamming) 위험 구간 — 기하 해석 (2026-07-31)
+
+공이 서로 충돌하는 정책의 대가로 **좁은 개구부에서 두 공이 아치를 이뤄 멈추는 교착**이 가능하다. 공 지름 `d = 0.6`(§4) 기준으로 개구부 폭 `W`에 따라:
+
+| `W` | 두 공의 배치 | 판정 |
+|---|---|---|
+| `< 1.0` | 수직으로 크게 어긋남 (`W=1.0`에서 Δy ≈ 0.447) | 미끄러져 통과 — **안전** |
+| **`1.05 ~ 1.25`** | 거의 수평으로 맞닿아 양 벽을 밀어냄 | ⚠️ **아치 형성 가능 — 위험 구간** (최악 `W = 1.2 = 2d`) |
+| `> 1.3` | 나란히 여유 통과 | **안전** |
+
+* 유도: 두 공이 접촉하면 중심 거리 `= d`. 폭 `W` 통로에서 중심 간 수평 거리는 최대 `W − d`이므로 수직 어긋남 `Δy = √(d² − (W − d)²)`. `Δy`가 클수록 접촉 법선이 수직에 가까워 중력에 미끄러진다.
+* **설계 함의**: **타일맵(1칸 = 1.0 격자)만 쓰면 위험 구간이 거의 생기지 않는다**(1.0은 안전측). 위험은 **SpriteShape 곡선 벽이 만드는 임의 폭 개구부**에서 나온다 — 곡선 지형을 넣을 때 병목 폭을 `≥ 1.3` 또는 `≤ 0.9`로 잡을 것.
+* **현재 마찰 값은 교착에 유리**: 공 `friction 0.1` / 벽 `friction 0.2`로 낮아 아치가 잘 유지되지 않는다. 병목을 좁힐 때 마찰을 함께 올리지 말 것.
+
 ---
 
 ## 6. 레벨 오소링 파이프라인 (Level Authoring)
@@ -135,6 +152,26 @@ Project: Labyrinth (2D Rotating Maze)
 5. 자식 콜라이더에는 **`Physics Material 2D`를 할당하지 않는다**(`sharedMaterial = null`). 마찰·반발은 Composite에 걸린 단일 `Wall Physics Material`이 일괄 지배한다.
 
 * **검증 지표(성공 판정)**: 병합 성공 시 `Maze.CompositeCollider2D`의 `shapeCount` **15 → 16**, `pathCount` **2 → 3**, `pointCount` **32 → 37**로 증가하고 `bounds`가 해당 도형을 포함하도록 확장된다. 자식 콜라이더는 `compositeCapable = true`, `attachedRigidbody = Maze`가 된다.
+* **`pathCount`가 오히려 줄면 정상**: SpriteShape를 타일맵 벽에 **맞닿게** 배치하면 Composite가 둘을 하나의 외곽선으로 융합해 `pathCount`가 감소한다(예: 3 → 2). 이것이 "이음매 없는 단일 벽면"이 만들어졌다는 신호다.
+
+### 6.1.1 `Collider Offset` — 시각/충돌 정렬 (2026-07-31 실측)
+
+기본값 `0`이면 **콜라이더가 스플라인 선 위**에 생성되는데, 엣지 스프라이트는 pivot 기준으로 스플라인 **바깥쪽까지** 그려진다. 그 결과 **공이 보이는 벽면에 파묻힌다.**
+
+* **필요량 계산**: 엣지 스프라이트가 스플라인 바깥으로 삐져나오는 두께
+  `t = (스프라이트 높이 px ÷ PPU) × (1 − pivot.y)`
+  현재 프로필의 `SpriteShapeEdge.png`는 `128px / PPU 256 / pivot.y 0.5` → **`t = 0.25` 로컬 유닛**.
+* ⚠️ **`Collider Offset` 단위는 `t`의 절반이다(실측)**: `offset = 0.25`를 넣으면 한쪽당 `0.125`만 확장된다. 따라서 **`Collider Offset = 2t = 0.5`** 를 넣어야 시각과 일치한다.
+
+  | `Collider Offset` | 콜라이더 폭 | 보이는 폭(Renderer) | 한쪽당 어긋남 |
+  |---|---|---|---|
+  | `0` | 2.2914 | 2.7884 | **0.2485** (= `t`) |
+  | `0.25` | 2.5404 | 2.7884 | 0.1240 |
+  | **`0.5`** | **2.7839** | 2.7884 | **0.0023** ✅ |
+
+* **검증법**: `SpriteShapeRenderer.localBounds`(= 보이는 범위)와 `PolygonCollider2D.points`의 AABB를 비교해 한쪽당 어긋남이 0에 수렴하는지 본다. 씬 뷰 Gizmos의 초록 외곽선 육안 확인도 병행.
+* ⚠️ **부작용**: 콜라이더가 사방으로 `t`만큼 커지므로 **인접 통로가 그만큼 좁아진다**(현재 scale 0.6 기준 월드 0.15). 병목 폭을 재설계할 때 §5.3.1의 끼임 위험 구간과 함께 볼 것.
+* ⚠️ **리베이크 함정 (MCP/스크립트로 조작할 때)**: `colliderOffset`을 바꾼 뒤 `RefreshSpriteShape()` + `BakeCollider()`만 호출하면 **지오메트리 생성이 지연되어 이전 값이 그대로 나온다**(같은 호출 안에서 여러 값을 시도하면 전부 동일 결과가 나와 오판하기 쉽다). **`UpdateSpriteShapeParameters()` → `BakeMesh()` → `BakeCollider()`** 순으로 호출해야 동기 반영된다. 인스펙터에서 손으로 바꿀 때는 해당 없음.
 * ⚠️ **`Assets/Prefabs/`에 두지 말 것**: SpriteShape 프로필은 `Assets/SpriteShapes/`에 둔다(2026-07-30 정규화).
 
 ### 6.2 동적 기믹 콜라이더 규칙 — **실측 검증됨 (2026-07-30)**
@@ -169,6 +206,18 @@ Project: Labyrinth (2D Rotating Maze)
 * **확정 의미**: 공이 데드존 트리거에 **진입(Enter)하면 즉시 실패.** (구 GDD의 "닿거나 *벗어나는*"이라는 모순 표현을 **'진입'으로 단일화.**)
 * ⚠️ **배치 제약**: enter 기반이므로 데드존 콜라이더는 **공의 시작/정상 플레이 영역과 겹치면 안 된다**(겹치면 시작과 동시에 즉시 게임오버). 미로 **바깥을 두르는 외곽 킬 영역**(예: 사방 프레임)으로 배치해, 공이 벽을 뚫고 이탈했을 때만 진입하도록 구성.
   * → 에디터 검증 항목은 부록 체크리스트 참조.
+* **실제 구성 (2026-07-31 적용)**: 위 제약의 반대편 실패 사례가 있었다 — `DeadZone`이 `(100, 0, 0)`에 홀로 놓여 커버 범위가 `x 50~150`이었고, 미로(±4)와 **완전히 분리**돼 장외 이탈 감지가 사실상 동작하지 않았다. 겹침을 피하려다 너무 멀리 밀어낸 형태.
+  * **해결 — 단일 오브젝트 + 콜라이더 4개 프레임**: `DeadZone`을 `(0,0,0)`에 두고 `BoxCollider2D` 4개(전부 `Is Trigger`)를 붙인다. 한 GameObject에 붙은 여러 콜라이더는 모두 같은 `OnTriggerEnter2D`를 호출하므로 **스크립트는 1개면 충분**하다(자식 분리 불필요).
+
+    | 방향 | Offset | Size |
+    |---|---|---|
+    | 상 | `(0, 11)` | `(32, 10)` |
+    | 하 | `(0, −11)` | `(32, 10)` |
+    | 좌 | `(−11, 0)` | `(10, 32)` |
+    | 우 | `(11, 0)` | `(10, 32)` |
+
+  * **설계 근거**: 안쪽 경계 **±6**(미로 ±4 및 공 시작점과 미접촉 → 즉시 게임오버 없음), 바깥 **±16**(두께 10 — 고속 터널링으로 관통 불가). 네 박스가 모서리 영역까지 빈틈없이 덮는다.
+  * **미로 크기를 바꾸면 이 수치도 함께 조정**할 것(안쪽 경계 > 미로 반폭 유지).
 
 ### 7.5 Fast Retry 초기화 범위 — **완전 정의**
 `GameManager.FastRetry()`가 **반드시** 되돌려야 하는 상태 전부:
@@ -208,6 +257,16 @@ Project: Labyrinth (2D Rotating Maze)
 
 * **고정 뷰(Orthographic)**. `Awake`의 `AdjustCameraViewport()`가 `Screen.width/height` 비율을 기준 비율(`targetWidth/targetHeight`, 기본 1080×1920)과 비교해, 세로로 더 긴(좁은) 화면에서 `orthographicSize`를 확대해 맵이 잘리지 않게 보정.
 * **[회전 클리핑 방지]**: 직사각형 화면에서 미로가 (시각적으로) 회전할 때 모서리가 잘리지 않도록, 가로/세로가 아니라 **미로의 대각선(외접원 반지름)** 기준으로 `orthographicSize`를 넉넉히 설정. → `defaultOrthoSize`를 해당 기준으로 세팅.
+  * **수식 (2026-07-31 확정)**: 세로 화면에서 구속 조건은 세로가 아니라 **가로 반폭**이다. `가로 반폭 = orthographicSize × aspect` 이므로,
+
+    ```
+    defaultOrthoSize ≥ R / targetAspect        (R = 미로 외접원 반지름)
+    ```
+
+    `AdjustCameraViewport()`는 `currentAspect < targetAspect`일 때만 크기를 키우므로 **`targetAspect`가 최악 조건**이다.
+  * **현재 값**: 미로 8×8 → `R = 4√2 ≈ 5.657`, `targetAspect = 1080/1920 = 0.5625` → 최소 `10.06` → **`defaultOrthoSize = 10.5` 적용**(가로 반폭 5.906, 여유 0.25).
+  * ⚠️ **과거 오설정**: `6`이었다. 세로 화면에서 가로 반폭이 `6 × 0.5625 = 3.375`밖에 안 돼 **회전 없이도 미로(반폭 4)가 잘리는** 상태였다. 에디터 Game 뷰가 가로형(비율 1.60)이면 `else` 분기로 반폭 9.59가 나와 **문제가 드러나지 않으니**, 검수는 반드시 Game 뷰를 세로(9:16)로 두고 할 것.
+  * ⚠️ **트레이드오프**: 세로 반높이가 10.5가 되어 미로(반높이 4) 위아래 여백이 크다. 정사각 미로를 세로 화면에서 회전시키는 구조의 필연적 비용이며, 여백은 HUD로 채우거나 미로 크기를 키워 흡수한다.
 * **UI 분리**: Canvas `Render Mode = Screen Space - Overlay`(회전 카메라에 HUD가 함께 돌아가지 않도록). 회전 배경 연출이 필요하면 해당 스프라이트를 Main Camera **자식**으로 둔다.
 * **UI 스케일러**: `Canvas Scaler = Scale With Screen Size`, `Reference Resolution 1080×1920`, `Match = 0.5`.
 * **Safe Area**: 최상단 UI 패널에 노치 대응 스크립트 부착(Task Phase 7).
@@ -260,6 +319,8 @@ Project: Labyrinth (2D Rotating Maze)
 - [ ] `Maze`에 단일 `Physics Material 2D` 할당(마찰/반발 일괄).
 - [ ] PlayerBall: `Continuous` + `Interpolate`, `Physics Material 2D` 할당, `ColorType` 지정.
 - [ ] **DeadZone 콜라이더가 공의 시작/플레이 영역과 겹치지 않음**(겹치면 즉시 게임오버 — §7.4).
+- [ ] **DeadZone이 미로를 실제로 감싸고 있음** — 겹침 회피만 신경 쓰다 너무 멀리 두면 이탈 감지가 죽는다. 4개 프레임 콜라이더 전부 `Is Trigger` 확인 (§7.4).
+- [ ] `CameraController.defaultOrthoSize ≥ R / targetAspect` (§9). **Game 뷰를 세로(9:16)로 두고** 확인할 것 — 가로 뷰에서는 문제가 안 보인다.
 - [ ] Goal: Solid 콜라이더(Trigger 아님), `ColorType` 지정.
 - [ ] Layer Collision Matrix: 색상별 공-게이트/공-공 정책 설정(§5).
 - [ ] UI Canvas = `Screen Space - Overlay`, Scaler 1080×1920 / Match 0.5.
