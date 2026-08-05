@@ -8,6 +8,34 @@
 
 ---
 
+### 📅 [2026-08-06] Phase 5.0 — UI 기반 셋업 3건 완료 및 터치 UI 무시 경로의 잠복 버그 발견
+
+* **작업 내용**: Phase 5 진입 전 선행 결함으로 기록해 둔 3건을 MCP로 처리했다.
+  * **`UICanvas` 신설** — `Screen Space - Overlay`, `CanvasScaler` = `ScaleWithScreenSize` / `1080 × 1920` / `MatchWidthOrHeight 0.5`, Layer `UI`. (CLAUDE.md §6 기준값)
+  * **`EventSystem` 활성화** — 기존 `activeSelf = false`.
+  * **입력 모듈 교체** — 레거시 `StandaloneInputModule` 제거 → `InputSystemUIInputModule` 추가.
+* **⚠️ 왜 '체크박스 하나'가 아니었나**: `ProjectSettings.activeInputHandler = 1`(New Input System **전용**)이다. 이 상태에서 레거시 `StandaloneInputModule`이 붙은 `EventSystem`을 그냥 활성화하면 모듈이 `UnityEngine.Input`을 읽으려다 런타임 예외가 난다. 모듈 교체가 활성화와 반드시 세트여야 했던 이유. `actionsAsset`은 추가 시 패키지 기본값(`DefaultInputActions.inputactions`)으로 자동 배선되어 수동 연결이 필요 없었다.
+* **검증 (플레이 모드 실측)**: UI 요소가 0개면 `IsPointerOverGameObject`가 항상 `false`라 검증 자체가 성립하지 않으므로, 임시 프로브 버튼(`__UIProbe`, 400×200 중앙)을 넣고 확인 후 제거했다.
+
+  | 확인 항목 | 결과 |
+  |---|---|
+  | `EventSystem.current.currentInputModule` | `InputSystemUIInputModule` ✅ |
+  | `Canvas.renderMode` / `GraphicRaycaster` | `ScreenSpaceOverlay` / 존재 ✅ |
+  | `RaycastAll` 화면 중앙 | 1히트 (`__UIProbe`) ✅ |
+  | `RaycastAll` 모서리 `(5,5)` | 0히트 ✅ |
+  | `GameManager.CurrentState` | `Play` (즉시 게임오버 없음) ✅ |
+  | 콘솔 에러 | 0건 ✅ |
+
+* **🔍 신규 발견 — 터치 환경에서 UI 무시 경로가 동작하지 않는다 (미조치)**: 위 검증 중 패키지 원본(`InputSystemUIInputModule.cs:293`, `GetPointerStateIndexFor:1779`)을 직접 읽어 확인한 결과,
+  * `IsPointerOverGameObject(id)`는 `id`를 **`pointerId` / `ExtendedPointerEventData.touchId` / `device.deviceId`** 중 하나로만 매칭한다. 게다가 `touchId != 0`인 항목만 deviceId 폴백 대상이라 **`0`은 구조적으로 매칭될 수 없다.**
+  * 그런데 `InputController.cs:53`은 **`touch.finger.index`** 를 넘긴다. `Finger.index`는 "화면상 N번째 손가락 슬롯 번호"(0-based)로 `touchId`와 전혀 다른 값이다. → **첫 손가락은 항상 `index 0` → 항상 `false`** → 실기기에서 버튼을 눌러도 미로가 회전한다. 두 번째 손가락(`index 1`)은 우연히 `touchId 1`(= 첫 번째 터치)에 매칭돼 더 나쁘다.
+  * 에디터 마우스 경로(`InputController.cs:78`, `-1`)는 문서상 **"any pointer"** 로 해석되므로 정상 동작한다. 그래서 지금까지 에디터 플레이만으로는 드러나지 않았다.
+  * **조치안**: `touch.touchId`로 교체(1줄). 드래그 추적용 `_currentTouchId`는 `finger.index` 유지로 무방하다(컨트롤러 내부 일관성만 필요). Phase 5.1 첫 항목으로 등록.
+* **의의**: Phase 5의 모든 UI 작업이 올라탈 바닥이 실제로 동작함을 수치로 확인했다. 동시에, 그 바닥 위에서 "UI를 눌렀는데 미로가 도는" 형태로만 드러났을 버그를 **UI를 만들기 전에** 잡아냈다.
+* **다음**: Phase 5.1 — 위 터치 버그 수정 → `GameManager` 상태 이벤트 노출(현재 `GameOver()`는 즉시 `FastRetry()`, Clear는 1.5초 뒤 자동 `FastRetry()`라 UI 팝업이 낄 자리가 없음) → HUD/결과 팝업. **로비는 세이브 시스템 이후**로 순서 조정(표시할 별 기록·스테이지 목록이 선행되어야 함).
+
+---
+
 ### 📅 [2026-08-06] Phase 4 종료 — 곡선 벽 저작 완료 및 `RoundWall_0` 프리팹화 (재사용 경로 확보)
 
 * **작업 내용**: 사용자가 곡선 벽 형상을 실제로 저작하고 플레이테스트를 마친 뒤, 정렬까지 끝난 상태를 `Assets/Prefabs/RoundWall_0.prefab`으로 프리팹화. 이로써 Phase 4의 마지막 잔여 항목(곡선/대각형 미로 형상 저작)이 종료됨.

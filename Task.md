@@ -1,7 +1,7 @@
 # 프로젝트 작업 목록 (Task List)
 
 > 기획 근거는 `GDD.md`, 구현 스펙은 `TDD.md`, 작업 규칙·아키텍처는 `CLAUDE.md`. 작업 완료 시 체크박스(`[x]`) 갱신.
-> 현재 진척: **Phase 1~4 및 Phase 3.5 완료**. 다음은 Phase 5(UI/메타) — 단, **UI 기반(Canvas 신설 + EventSystem 활성화 + Input System UI 모듈 교체)이 선행 필수**.
+> 현재 진척: **Phase 1~4, Phase 3.5, Phase 5.0 완료**. 다음은 Phase 5.1(GameManager 상태 이벤트) → HUD/결과 팝업.
 
 ## Phase 1: 기본 물리 및 조작 프로토타입
 - [x] **프로젝트 세팅**: 모바일 타겟 프레임(60) 설정 및 화면 꺼짐 방지 (Bootstrapper.cs 구현 완료)
@@ -20,7 +20,7 @@
     - `CameraController`에 현재 각도를 매 프레임 제공하는 인터페이스 추가
 - [x] **[Script] `CameraController.cs` 수정**:
     - `SetWorldRotation(float angle)` 역할의 각도값을 참조하여 **`LateUpdate()`** 에서 `transform.rotation = Quaternion.Euler(0, 0, -angle)` 적용 (Jittering 방지)
-- [x] **[Editor] UI Canvas의 Render Mode가 `Screen Space - Overlay`인지 확인** (UI가 함께 돌아가는 현상 방어 완료)
+- [x] **[Editor] UI Canvas의 Render Mode가 `Screen Space - Overlay`인지 확인** — 작성 당시 씬에 Canvas가 없어 스테일 체크였음. Phase 5.0에서 `UICanvas`를 실제로 신설하며 `ScreenSpaceOverlay` 확인 완료(2026-08-06)
 - [x] **[Script] `InputController.cs` 참조 수정**: `MazeRotator` → `WorldRotationController` (SerializeField를 통한 인스펙터 연결 완료)
 - [x] **[QA] 검증**: 빠른 회전 시 공이 튀어오르지 않으며, 중력 방향이 화면상 "아래"와 일치함 확인 완료
 
@@ -46,7 +46,21 @@
 - [x] **병합 가이드 준수**: 모든 비정형 콜라이더의 'Used By Composite' 활성화 및 Maze 루트 자식 배치 규칙 수립 — `MazeGrid/Maze/Wall_SpriteShape_01`에 적용·실측 검증(`shapeCount` 15→16, `pathCount` 2→3, `pointCount` 32→37)
 
 
+## Phase 5.0: UI 기반 셋업 (Phase 5 선행 필수) — 2026-08-06 완료
+> Phase 5 진입 전 씬에 Canvas가 0개, EventSystem이 비활성 + 레거시 모듈이던 상태를 해소.
+- [x] **[Editor] `UICanvas` 신설**: `Screen Space - Overlay` · `CanvasScaler` = Scale With Screen Size · `1080 × 1920` · Match `0.5` (CLAUDE.md §6 준수), Layer = `UI`
+- [x] **[Editor] `EventSystem` 활성화** (기존 `activeSelf = false`)
+- [x] **[Editor] 입력 모듈 교체**: 레거시 `StandaloneInputModule` → `InputSystemUIInputModule`. `ProjectSettings.activeInputHandler = 1`(New 전용)이라 교체 없이 활성화하면 런타임 예외 발생했을 것. `actionsAsset`은 패키지 기본값 자동 배선됨
+- [x] **[QA] 검증**: 플레이 모드에서 `currentInputModule = InputSystemUIInputModule`, `RaycastAll` 화면 중앙 1히트 / 모서리 0히트, `GameManager.CurrentState = Play`, 콘솔 에러 0건 (임시 프로브 버튼으로 확인 후 제거)
+
+## Phase 5.1: UI 연결 기반 (코드)
+- [ ] **⚠️ [Bug] `InputController` 터치 UI 무시 경로 수정**: `InputController.cs:53`이 `IsPointerOverGameObject(touch.finger.index)`를 호출하나, `InputSystemUIInputModule`은 `pointerId`/`touchId`/`deviceId`로만 매칭한다(`finger.index`는 N번째 손가락 슬롯 번호로 별개 값). 첫 손가락은 `index 0` → 항상 `false` 반환 → **실기기에서 버튼을 눌러도 미로가 회전한다.** `touch.touchId`로 교체 필요. (에디터 마우스 경로 `-1`은 "any pointer"라 정상이라 지금껏 드러나지 않음)
+- [ ] **`GameManager` 상태 이벤트 노출**: `event Action<GameState>` 추가 + `OnDisable/OnDestroy` 해제. 현재 `GameOver()`는 즉시 `FastRetry()`(`GameManager.cs:75`), Clear는 1.5초 뒤 자동 `FastRetry()`(`GameManager.cs:85`)라 UI 팝업이 낄 자리가 없음 → UI 주도로 전환
+- [ ] **HUD / 결과 팝업**: 타이머 · 별점 · 리트라이 버튼. `CalculateStars()` 결과를 콘솔 로그 대신 UI로 표시
+- [ ] **Safe Area 대응**: 최상단 UI 패널에 노치 대응 스크립트 부착 (CLAUDE.md §6)
+
 ## Phase 5: 메타 게임 및 UI 플로우 (UI & Meta)
+> 순서 주의: **로비는 세이브(별 기록)와 스테이지 레지스트리가 선행**되어야 표시할 데이터가 생긴다. 세이브 → 로비 순으로 진행할 것.
 - [ ] **로비 및 월드맵**: 메인 로비 메뉴, 스테이지 선택 UI, 각 스테이지 성과(별점 기록) 표시 시스템 구현
 - [ ] **환경설정 팝업**: 사운드 볼륨, 햅틱 ON/OFF, 색각이상(Colorblind) 모드, **모션 완화(Reduce Motion: 회전 감속/폭 축소) 토글** 전환 플로우
 - [ ] **세이브 시스템**: 별 기록·진행 해금·보유 화폐·구매 스킨을 로컬(PlayerPrefs/JSON)에 저장. **스키마 버전 필드 + 간단 암호화/체크섬** 포함 (GDD §7, TDD §10)
