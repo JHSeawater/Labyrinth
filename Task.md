@@ -54,7 +54,7 @@
 - [x] **[QA] 검증**: 플레이 모드에서 `currentInputModule = InputSystemUIInputModule`, `RaycastAll` 화면 중앙 1히트 / 모서리 0히트, `GameManager.CurrentState = Play`, 콘솔 에러 0건 (임시 프로브 버튼으로 확인 후 제거)
 
 ## Phase 5.1: UI 연결 기반 (코드)
-- [ ] **⚠️ [Bug] `InputController` 터치 UI 무시 경로 수정**: `InputController.cs:53`이 `IsPointerOverGameObject(touch.finger.index)`를 호출하나, `InputSystemUIInputModule`은 `pointerId`/`touchId`/`deviceId`로만 매칭한다(`finger.index`는 N번째 손가락 슬롯 번호로 별개 값). 첫 손가락은 `index 0` → 항상 `false` 반환 → **실기기에서 버튼을 눌러도 미로가 회전한다.** `touch.touchId`로 교체 필요. (에디터 마우스 경로 `-1`은 "any pointer"라 정상이라 지금껏 드러나지 않음)
+- [x] **⚠️ [Bug] `InputController` 터치 UI 무시 경로 수정** (2026-08-06): `IsPointerOverGameObject()` 의존을 제거하고 `IsPointerOverUI(screenPos)`(캐시된 `PointerEventData` + `RaycastAll`)로 교체. 구 코드는 ① `finger.index`를 넘겨 매칭 자체가 불가했고, ② `IsPointerOverGameObject`는 `EventSystem.Update()` 결과를 읽는데 `EventSystem`에 실행 순서 지정이 없어 터치 시작 프레임에 상태가 없을 수 있었다. Input System 패키지 `UIvsGameInput` 샘플의 회피책과 동일한 방식. **⚠️ 실기기 터치 검증은 미완** — 에디터가 Game View 포커스 없이는 터치 이벤트를 버려 인게임 시뮬레이션 불가
 - [ ] **`GameManager` 상태 이벤트 노출**: `event Action<GameState>` 추가 + `OnDisable/OnDestroy` 해제. 현재 `GameOver()`는 즉시 `FastRetry()`(`GameManager.cs:75`), Clear는 1.5초 뒤 자동 `FastRetry()`(`GameManager.cs:85`)라 UI 팝업이 낄 자리가 없음 → UI 주도로 전환
 - [ ] **HUD / 결과 팝업**: 타이머 · 별점 · 리트라이 버튼. `CalculateStars()` 결과를 콘솔 로그 대신 UI로 표시
 - [ ] **Safe Area 대응**: 최상단 UI 패널에 노치 대응 스크립트 부착 (CLAUDE.md §6)
@@ -74,7 +74,7 @@
 
 ## Phase 7: 모바일 최적화 및 출시 (Optimization & Release)
 - [ ] **프로파일링**: GC(Garbage Collector) 튜닝 및 메모리 누수 점검
-- [ ] **모바일 디바이스 테스트**: 실제 기기 터치 조작감 튜닝, Safe Area 노치 대응 완벽 검토
+- [ ] **모바일 디바이스 테스트**: 실제 기기 터치 조작감 튜닝, Safe Area 노치 대응 완벽 검토, **UI 버튼 위 터치 시 미로가 회전하지 않는지 확인**(Phase 5.1 수정분 — 에디터가 Game View 포커스 없이 터치를 폐기해 인게임 검증 불가)
 - [ ] **오브젝트 풀링(Object Pooling)**: 파티클 및 SFX 시스템에 풀링 적용 및 메모리 누수 점검
 - [ ] **분석/KPI 연동**: 핵심 이벤트(`level_start`/`level_clear`/`level_fail`, `retry_count`, `rewarded_ad_view`, `skin_purchase`) 로깅 및 리텐션·레벨 실패율 수집 (GDD §10)
 - [ ] **최소 기기 사양 확정 & 성능 예산**: 대상 최저 기기에서 60FPS·메모리·드로우콜 목표 검증 (TDD §1)

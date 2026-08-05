@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -16,6 +17,10 @@ public class InputController : MonoBehaviour
     private bool _isDragging = false;
     private int _currentTouchId = -1;
     private bool _isUsingTouch = false;
+
+    // UI 판정용 레이캐스트 캐시 (최초 1회만 할당 → 드래그 시작마다 GC 발생 방지)
+    private PointerEventData _uiPointerData;
+    private readonly List<RaycastResult> _uiRaycastResults = new List<RaycastResult>();
 
     private void Awake()
     {
@@ -50,8 +55,7 @@ public class InputController : MonoBehaviour
                 if (touch.phase == TouchPhase.Began)
                 {
                     if (_isDragging) continue;
-                    if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject(touch.finger.index))
-                        continue;
+                    if (IsPointerOverUI(touch.screenPosition)) continue;
 
                     StartDrag(touch.screenPosition, touch.finger.index);
                 }
@@ -75,7 +79,7 @@ public class InputController : MonoBehaviour
 
             if (mouse.leftButton.wasPressedThisFrame)
             {
-                if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject(-1)) return;
+                if (IsPointerOverUI(mousePos)) return;
                 StartDrag(mousePos, -1);
             }
             else if (mouse.leftButton.isPressed)
@@ -112,6 +116,27 @@ public class InputController : MonoBehaviour
     {
         _isDragging = false;
         _currentTouchId = -1;
+    }
+
+    /// <summary>
+    /// 해당 스크린 좌표 아래에 UI가 있는지 직접 레이캐스트로 판정합니다. (true면 회전 조작을 무시)
+    /// EventSystem.IsPointerOverGameObject()를 쓰지 않는 이유:
+    ///  ① 그 값은 EventSystem.Update()가 채워둔 상태를 읽는데, EventSystem에는 실행 순서 지정이 없어
+    ///     터치가 시작된 프레임에 아직 상태가 없을 수 있다(= 드래그가 그대로 새어나감).
+    ///  ② InputSystemUIInputModule은 인자를 pointerId/touchId/deviceId로만 매칭하므로
+    ///     EnhancedTouch의 finger.index(N번째 손가락 슬롯 번호)를 넘기면 매칭 자체가 되지 않는다.
+    /// 드래그 시작 시점에만 호출되므로(프레임마다 아님) 레이캐스트 비용은 무시 가능하다.
+    /// </summary>
+    private bool IsPointerOverUI(Vector2 screenPos)
+    {
+        if (EventSystem.current == null) return false;
+
+        if (_uiPointerData == null)
+            _uiPointerData = new PointerEventData(EventSystem.current);
+
+        _uiPointerData.position = screenPos;
+        EventSystem.current.RaycastAll(_uiPointerData, _uiRaycastResults);
+        return _uiRaycastResults.Count > 0;
     }
 
     private float GetAngleFromCenter(Vector2 screenPos)

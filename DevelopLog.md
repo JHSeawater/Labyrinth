@@ -8,6 +8,33 @@
 
 ---
 
+### 📅 [2026-08-06] Phase 5.1 — 터치 UI 무시 경로 수정: `IsPointerOverGameObject` 의존 제거
+
+* **작업 배경**: 직전 로그에서 발견한 버그(`InputController.cs:53`이 `IsPointerOverGameObject(touch.finger.index)` 호출)를 수정. 당시 조치안은 "`touch.touchId`로 교체(1줄)"였으나, **착수 후 그것만으로는 부족하다는 것이 확인되어 방식을 바꿨다.**
+* **왜 1줄로 부족했나 — 두 번째 결함**: `IsPointerOverGameObject`는 `EventSystem.Update()`가 채워둔 상태를 읽는다(패키지 주석 `InputSystemUIInputModule.cs:264-266`이 명시). 그런데 `EventSystem`(ugui 2.0.0 원본 확인)에는 **`DefaultExecutionOrder` 지정이 없어** `InputController`와 같은 order 0 버킷에 있고, 둘의 상대 실행 순서는 보장되지 않는다. `InputController.Update()`가 먼저 돌면 **터치가 시작된 그 프레임에는 아직 상태가 없어 `false`** 가 나오고, `_isDragging`은 래치되므로 **그 드래그 전체가 새어나간다.** ID를 고쳐도 절반만 고치는 셈.
+* **채택한 방식 — 직접 레이캐스트**: `IsPointerOverUI(Vector2 screenPos)` 헬퍼 신설. 캐시된 `PointerEventData` + `List<RaycastResult>`로 `EventSystem.current.RaycastAll()`을 직접 호출한다. Input System 패키지가 **같은 상황의 회피책으로 제시하는 방식과 동일**하다(`Samples~/UIvsGameInput/UIvsGameInputHandler.cs:377-389`).
+  * 실행 순서 무관 — 그 자리에서 즉시 판정.
+  * ID 의미론 문제 소멸 — 애초에 ID를 넘기지 않는다. 터치/마우스 경로가 같은 코드를 쓴다.
+  * `[DefaultExecutionOrder]`로 순서를 강제하는 대안도 있었으나 **보이지 않는 전역 결합**이 생긴다(누가 나중에 Script Execution Order를 건드리면 콘솔 에러 없이 버그가 부활). 이 프로젝트가 반복해서 당한 유형이라 기각.
+  * 호출 시점이 **드래그 시작 때뿐**(프레임마다 아님)이라 레이캐스트 비용은 무시 가능.
+* **검증 (플레이 모드, 임시 프로브 버튼 400×200 중앙)**:
+
+  | 검사 | 결과 |
+  |---|---|
+  | `IsPointerOverUI(540,960)` 프로브 위 | `True` ✅ |
+  | `IsPointerOverUI(100,300)` UI 없음 | `False` ✅ |
+  | `IsPointerOverUI(345,960)` 좌경계 **안** | `True` ✅ |
+  | `IsPointerOverUI(335,960)` 좌경계 **밖** | `False` ✅ |
+  | 구 코드가 넘기던 `IsPointerOverGameObject(0)` (UI 위에서) | `False` ❌ ← 버그 재확인 |
+  | GC (5000회, 무할당 메서드 기준선 차감) | `4096 bytes` ≈ 0.8B/call — 사실상 0 |
+
+  경계 10px 안팎에서 판정이 뒤집히는 것으로 프로브 rect를 실제로 맞히고 있음을 확인. 콘솔 에러 0건. 프로브는 검증 후 제거.
+* **🔍 도구 한계 (정직하게 기록)**: **실기기와 동일한 "터치로 버튼을 눌러본" 종단 검증은 하지 못했다.** 가상 `Touchscreen`에 `TouchState`를 큐잉해 인게임 시뮬레이션을 시도했으나, 에디터 플레이 모드는 **Game View에 포커스가 없으면 포인터/터치 입력을 폐기**한다(MCP 구동 시 항상 해당). 우회하려면 `editorInputBehaviorInPlayMode`를 바꿔야 해 프로젝트 설정을 건드리게 되므로 중단하고, 대신 **변경된 판정 함수를 리플렉션으로 직접 호출**하는 방식으로 검증했다. 호출부는 2줄(`:58`, `:82`)이라 육안 확인으로 충분하다고 판단.
+  * 시행착오 기록: `TouchState.pressure`를 0으로 두면 눌림으로 취급되지 않아 터치가 아예 등록되지 않는다(`InputTestFixture.SetTouch`는 `pressure: 1`). 또 `InputSystem.Update()`를 직접 부르면 이벤트가 그 자리에서 소비돼 **`Began` 페이즈가 MonoBehaviour `Update()` 프레임에 걸리지 않는다** — 이 두 함정 때문에 초기 테스트 2건이 "통과"로 잘못 읽혔다(`_isDragging = False`가 "UI를 걸러냈다"가 아니라 "터치 경로를 아예 안 탔다"였음). `_isUsingTouch`와 `_initialTouchAngle`(EndDrag가 되돌리지 않는 값)을 함께 봐야 구분된다.
+* **남은 작업**: 실기기 빌드에서 버튼 위 드래그 시 미로가 돌지 않는지 확인 (Phase 7 디바이스 테스트에 포함).
+
+---
+
 ### 📅 [2026-08-06] Phase 5.0 — UI 기반 셋업 3건 완료 및 터치 UI 무시 경로의 잠복 버그 발견
 
 * **작업 내용**: Phase 5 진입 전 선행 결함으로 기록해 둔 3건을 MCP로 처리했다.
