@@ -107,7 +107,7 @@
 ## 6. 피드백 & UI (Feedback & UI)
 
 * **충돌 피드백 쿨타임**: SFX/Haptic은 `Time.time` 기반 **0.1초 내부 쿨타임**을 강제한다 (연속 충돌 시 모터 폭주/사운드 깨짐 방지).
-* **풀링(Pooling) — 예정(Phase 7, 현재 미구현)**: 파티클·SFX는 `Instantiate/Destroy` 대신 `PoolManager`로 활성화/비활성화 (GC 부하 ↓, 60FPS 유지).
+* **풀링(Pooling) — 예정(Task Phase 14, 현재 미구현)**: 파티클·SFX는 `Instantiate/Destroy` 대신 `PoolManager`로 활성화/비활성화 (GC 부하 ↓, 60FPS 유지).
 * **해상도**: 기준 `1080 × 1920`, `Canvas Scaler` = `Scale With Screen Size` (Match `0.5`). 카메라는 미로의 **대각선(외접원 반지름)** 기준으로 `orthographicSize`를 설정하여 회전 시 모서리 클리핑 방지.
 * **Safe Area**: 최상단 UI 패널에 노치(Notch) 대응 스크립트를 부착한다.
 * 쿨타임·풀링·해상도 보정 수식 등 구현 상세: **TDD §8~9**.

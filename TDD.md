@@ -7,8 +7,8 @@ Project: Labyrinth (2D Rotating Maze)
 
 | 항목 | 값 |
 |---|---|
-| 버전 | v1.3 |
-| 최종 수정 | 2026-07-31 |
+| 버전 | v1.4 |
+| 최종 수정 | 2026-08-08 |
 | 엔진 | Unity 6 (6000.3.9f1) · URP 2D |
 | 플랫폼 | Mobile (iOS / Android), TargetFrameRate 60+ |
 | 입력 | New Input System (EnhancedTouch) |
@@ -22,6 +22,7 @@ Project: Labyrinth (2D Rotating Maze)
 | 2026-07-30 | v1.1 | Phase 4 실측 반영: §6.1 SpriteShape 병합 절차·검증 지표, §6.2 동적 기믹 **자체 Kinematic Rigidbody2D 필수** 신규 발견, §10 StageData 로드 경로 명시, 부록 체크리스트 2항 추가. |
 | 2026-07-31 | v1.2 | 씬 셋업 결함 2건 수정 반영: §7.4 DeadZone 4프레임 실제 구성(과거 미로와 분리돼 이탈 감지 무력), §9 `defaultOrthoSize ≥ R / targetAspect` 수식 확정(과거 `6` → 세로 화면 클리핑), 부록 체크리스트 2항 추가. |
 | 2026-07-31 | v1.3 | §6.1.1 신설 — `Collider Offset` 정렬 수식(`2t`, 실측표)과 리베이크 함정(`BakeMesh()` 필수). §4 공 실측 크기 정정(반지름 0.3), §5.3.1 끼임 위험 구간 기하 해석 추가. |
+| 2026-08-08 | v1.4 | Task.md 재번호(2026-08-07 개편) 반영 — §5.2·§8·§10의 스테일 Phase 참조 정정, §5.2 Matrix 배선 완료 반영, §11 `FeedbackManager` 상태 정정(✅→스텁·호출처 0건). 본문 Phase 번호는 이제 전부 신 번호를 가리킨다(과거 변경 이력 서술만 구 번호 유지 — 대조는 Task.md §구 번호 ↔ 신 번호 매핑). |
 
 ---
 
@@ -111,7 +112,7 @@ Project: Labyrinth (2D Rotating Maze)
   * **Goal 정답 판정 → 코드(`ColorType` enum) 유지**: 이건 선택적 충돌이 아니라 "정체성 판정 + 오브젝트 제거"다. Solid 콜라이더가 오답=벽을 무료로 주고 코드는 정답 공 제거(`SetActive(false)`)만 담당(현행 `Goal.cs`가 이미 최적). **레이어로 옮기지 말 것**.
 * **게이트 방향 = 같은 색 통과**(GDD §5.1.1): Matrix에서 **`Gate_X`가 `Ball_X`만 무시(통과)**, 나머지 공 레이어와는 **충돌 ON**(차단). 모든 **공-공 교차는 ON 유지**(§5.3).
 * ⚠️ **레이어 예산 주의**: Unity 레이어는 32개(일부 예약)뿐이다. `4색 × (공·게이트…)`를 전부 개별 레이어로 분리하면 예산이 빠르게 고갈된다. 계획된 4색이면 공4+게이트4=8레이어로 가용 범위 내(색이 6~7 초과 시 게이트를 `IgnoreCollision` 사전세팅 코드로 폴백 검토).
-* **현재 씬(2026-07-06)**: `Ball_Yellow/Ball_Green/Gate_Yellow/Gate_Green` 레이어는 생성돼 있으나 공은 `Default(0)`에 있고 Matrix 미배선(게이트 기믹 미구현). **제거하지 말고 유지** → Phase 4 게이트 구현 시 공을 색 레이어로 이동하고 위 매트릭스로 배선.
+* **현재 씬(2026-08-08 갱신)**: `Ball_Yellow/Ball_Green/Gate_Yellow/Gate_Green` 레이어는 생성돼 있으나 공은 `Default(0)`에 있고 게이트 오브젝트는 미구현. **Matrix는 2026-08-07 배선 완료**(같은 색 `Ball_X × Gate_X`만 OFF, 커밋 `d23ec99`). → **Task Phase 8(색상 게이트)** 에서 공 레이어 이동·게이트 오브젝트 제작.
 
 ### 5.3 공-공 충돌 정책 — **확정: 모든 공이 서로 충돌**
 * 색에 관계없이 **모든 공이 물리적으로 충돌**한다(핀볼식 상호 간섭). 레벨 설계 영향은 GDD §5.3.
@@ -247,7 +248,7 @@ Project: Labyrinth (2D Rotating Maze)
 
 * **충돌 피드백 쿨타임**: `Time.time` 기반 **0.1초 내부 쿨타임**을 강제(`PlayHaptic(intensity)`). 조밀한 골목·고속 회전 시 1초에 수십 회 충돌해도 진동 모터 폭주/사운드 깨짐을 방지.
 * **충돌 강도 연동**: 충돌 상대속도(충격량)에 비례해 햅틱 세기·SFX 볼륨 스케일.
-* **오브젝트 풀링(PoolManager)**: 파티클·SFX는 `Instantiate/Destroy` 대신 풀 활성/비활성으로 재사용(GC 부하↓, 60FPS 유지). → **현재 미구현, Task Phase 7 예정.** 도입 시 Fast Retry(§7.5)의 "풀 반환"과 연결.
+* **오브젝트 풀링(PoolManager)**: 파티클·SFX는 `Instantiate/Destroy` 대신 풀 활성/비활성으로 재사용(GC 부하↓, 60FPS 유지). → **현재 미구현, Task Phase 14 예정.** 도입 시 Fast Retry(§7.5)의 "풀 반환"과 연결.
 
 ---
 
@@ -279,7 +280,7 @@ Project: Labyrinth (2D Rotating Maze)
 
 * **스테이지 데이터(`StageData : ScriptableObject`)**: `LevelID`, `TimeLimitFor3Stars`(기본 15s), `TimeLimitFor2Stars`(기본 30s). 별점은 `GameManager.CalculateStars()`가 `_playTimer`와 비교해 산출(이하 3별 / 2별 / 그 외 1별). 메뉴: `Labyrinth/StageData`.
   * **현재 로드 경로(2026-07-30)**: 인스턴스 `Assets/Data/Stage 1.asset`(LevelID 1 / 15s / 30s)을 `GameManager._currentStageData`에 **인스펙터 주입**한다. 1씬 = 1스테이지 구조이므로 이것이 곧 로드 시스템이다. `_currentStageData`가 `null`이면 `CalculateStars()`는 **무조건 1별**을 반환하므로(무음 폴백) 씬 셋업 시 참조 연결을 반드시 확인할 것.
-  * **확장 시점**: 스테이지 목록·해금 상태를 다루는 레지스트리/`StageLoader`는 로비·월드맵이 생기는 **Phase 5**에서 도입한다. 그 전에 만들면 사용처 없는 추상화가 된다.
+  * **확장 시점**: 스테이지 목록·해금 상태를 다루는 레지스트리/`StageLoader`는 로비·월드맵이 생기는 **Task Phase 11**에서 도입한다. 그 전에 만들면 사용처 없는 추상화가 된다.
 * **세이브 데이터**: 별 기록·클리어 타임·해금 진행·보유 화폐·구매 스킨을 로컬(PlayerPrefs 또는 JSON)에 저장. **[구현 예정]**
   * 스키마 버전 필드 포함(마이그레이션 대비), 간단 암호화/체크섬으로 변조 방지.
   * 별(성취 기록)과 소프트 화폐는 **별도 필드**로 저장(분리 근거는 GDD §7).
@@ -298,7 +299,7 @@ Project: Labyrinth (2D Rotating Maze)
 | `WorldRotationController` | `Scripts/` | 각도 보간 + `Physics2D.gravity` 갱신 + 카메라 통지 | ✅ |
 | `CameraController` | `Scripts/` | 해상도 보정 + LateUpdate 역회전 | ✅ |
 | `GameManager` | `Scripts/Managers/` | FSM, 승/패, Fast Retry, 별점 | ✅ |
-| `FeedbackManager` | `Scripts/Managers/` | 햅틱/SFX 쿨타임 피드백 | ✅ |
+| `FeedbackManager` | `Scripts/Managers/` | 햅틱/SFX 쿨타임 피드백 | ⚠️ 스텁(호출처 0건 — Task Phase 3 재개방) |
 | `PlayerBall` | `Scripts/Objects/` | 색상·초기상태·FastReset | ✅ |
 | `Goal` | `Scripts/Objects/` | 색상 매칭 골인/벽 처리 | ✅ |
 | `DeadZone` | `Scripts/Objects/` | 장외 이탈 실패 | ✅ |
