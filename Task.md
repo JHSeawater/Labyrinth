@@ -170,20 +170,42 @@
       값이 실제로 달라졌을 때만 `SetState()`가 1회 발행. **static인 이유** — 구독자(UI)의 `OnEnable`이 `GameManager.Awake`보다 먼저 돌아도 구독이 조용히 실패하지 않게 하기 위함(실행 순서 의존 제거). 구독자는 `OnDisable`/`OnDestroy`에서 해제할 것(CLAUDE.md §4). `OnDestroy`에서 `Instance == this`일 때만 static을 정리한다
 - [x] `[Code]` **`GameState.Pause` 실구현** (2026-08-07): `Pause()` / `Resume()`.
       `Time.timeScale = 0`으로 `FixedUpdate`를 멈춰 물리·중력 회전을 동시에 동결하고, `InputController.SetInputEnabled(false)`로 회전 입력을 잠근다 — **`Update()`는 timeScale 0에서도 계속 돌기 때문에**, 잠그지 않으면 일시정지 중 드래그가 목표 각도에 누적돼 재개 순간 미로가 튄다. `FastRetry()`가 `timeScale`을 먼저 1로 되돌려 일시정지 중 재시작해도 시간이 멈춘 채 남지 않는다
-- [x] `[QA]` **상태 전이 계약 실측** (2026-08-07, 플레이 모드): 아래 §Phase 7 검증 기록 표 참조. 전이 2000회 할당 **0 bytes**(`Action<GameState>`가 enum을 박싱하지 않음)
+- [x] `[QA]` **상태 전이 계약 실측** (2026-08-07, 플레이 모드): 아래 §Phase 7 검증 기록 표 참조
 - [ ] `[Code]` **UI 주도 플로우로 전환**: `GameOver()`의 즉시 `FastRetry()`(`GameManager.cs:105`)와 `ClearDelayRoutine()`의 자동 `FastRetry()`를 제거하고 UI 버튼이 호출하도록
       ※ **(b) 방침 채택** — 지금 제거하면 재시작 수단이 통째로 사라지므로 팝업 완성까지 유지한다. 해당 줄에 제거 시점을 명시한 주석을 달아두었다(`GameManager.cs:103-104`)
-- [ ] `[Code]` HUD: 타이머 · 일시정지 버튼 (GDD §8.2 — 최소 UI로 몰입 유지)
+- [x] `[Code]` **HUD: 타이머 · 일시정지 버튼** (2026-08-07) — `Assets/Scripts/UI/HUDController.cs`.
+      `GameManager.OnStateChanged` 구독(`OnEnable` 구독 / `OnDisable` 해제) + `Start`에서 `CurrentState`를 1회 직접 읽어 초기 표시를 맞춘다(이벤트는 구독 이후의 "변화"만 알려주므로).
+      타이머는 **소수 첫째 자리가 바뀔 때만** 갱신(`_lastShownTenths`) — 값이 그대로여도 `SetText`하면 TMP 메시가 재생성되어 60fps 중 50/60이 낭비된다.
+      버튼 콜백은 `AddListener`로 코드 연결(`OnDestroy`에서 `RemoveListener`) — 인스펙터 persistent listener는 **배선이 빠져도 콘솔 에러 없이 조용히 통과**하기 때문
+- [x] `[Editor]` **HUD · 일시정지 패널 씬 배치** (2026-08-07): `UICanvas/HUD/{TimerText, PauseButton}` + `UICanvas/PausePanel/{Title, ResumeButton, RetryButton}`.
+      `HUD` 루트는 Graphic이 없고 `TimerText.raycastTarget = false` → **전체화면을 덮어도 미로 드래그를 삼키지 않는다**(실측 확인). `PausePanel`의 dim Image는 `raycastTarget = true` 유지
+- [x] `[Editor]` **인스펙터 배선 5건** 전부 non-null 확인: `_timerText` `_pausePanel` `_pauseButton` `_resumeButton` `_retryButton`
 - [ ] `[Code]` 결과 팝업: 최종 타임 · 별 1~3 · `[재시작]` `[다음]` `[로비]` (`[다음]`/`[로비]`는 Phase 11에서 활성)
-- [ ] `[Code]` `CalculateStars()` 결과를 `Debug.LogWarning`(`:81`) 대신 UI로 전달
-- [ ] `[Editor]` HUD · 결과 팝업 · 일시정지 팝업 프리팹 제작 및 `UICanvas` 배치
-- [ ] `[Editor]` 각 UI 컴포넌트 ↔ 스크립트 인스펙터 배선
+- [ ] `[Code]` `CalculateStars()` 결과를 `Debug.LogWarning`(`GameManager.cs:81`) 대신 UI로 전달
+- [ ] `[Editor]` 결과 팝업 씬 배치 및 배선
+- [ ] `[Editor]` **HUD·팝업 프리팹화** — 현재는 씬에 직접 배치했다. 로비 씬 신설(Phase 11) 시 재사용하려면 프리팹이 필요
 - [ ] `[Code]` **Safe Area 대응** 스크립트 (CLAUDE.md §6)
 - [ ] `[Editor]` Safe Area 스크립트를 최상단 UI 패널에 부착
 - [ ] `[QA]` 클리어/실패 → 팝업 표시 → 버튼 재시작까지 플레이 검증, 콘솔 에러 0건
 - [ ] `[QA]` **일시정지 중 타이머·물리가 실제로 멈추는지 프레임 경과 검증** — ⚠️ **MCP로 검증 불가, 인터랙티브 플레이테스트 필요.**
       에디터가 백그라운드일 때 플레이어 루프를 돌리지 않아 `Time.frameCount`가 realtime 47초 동안 `3`에 고정됐다(일시정지 여부와 무관, `timeScale=1`·`state=Play`로 되돌려도 동일). 즉 **프레임이 아예 안 흘러 "멈췄다"를 증명할 수 없다.**
       메커니즘 자체는 이중으로 보장된다 — `timeScale=0`이면 `Time.deltaTime==0`이고 `FixedUpdate`가 호출되지 않으며, `Update()`에도 `CurrentState == Play` 가드가 있다. 그래도 실측 전까지 `[ ]` 유지.
+
+### Phase 7 검증 기록 — HUD 동작 (2026-08-07, 플레이 모드 실측)
+
+| # | 시나리오 | 결과 |
+|---|---|---|
+| H1 | 초기 | `PausePanel` 비활성 · `PauseButton` 활성 · 타이머 `'7.3'` 표시 중 |
+| H2 | 화면 중앙 UI 판정 | **`False`** — HUD가 전체화면을 덮어도 미로 드래그가 통과 |
+| H3 | 일시정지 버튼 위 UI 판정 | **`True`** — 버튼이 회전 조작을 정상 차단 |
+| H4 | 일시정지 버튼 클릭 | `state=Pause` · `timeScale=0` · 패널 활성 · 일시정지 버튼 숨김 |
+| H5 | 일시정지 중 입력 잠금 | `InputController._inputEnabled = False` — **회전 차단의 실제 보증** |
+| H6 | 계속하기 클릭 | `state=Play` · `timeScale=1` · 패널 비활성 |
+| H7 | 타이머 포맷 | `12.34` → `'12.3'`, `12.38` → `'12.3'`(갱신 생략), `12.44` → `'12.4'` |
+| H8 | 다시하기 클릭 | `FastRetry()` 호출 → 타이머 `0.00` |
+
+⚠️ **판정 못 한 것**: "일시정지 패널이 뒤쪽 미로 조작을 레이캐스트로 막는가"(H2의 일시정지판). 패널을 켠 직후 같은 프레임에 레이캐스트하면 `Image.depth == -1`이라 `GraphicRaycaster`가 건너뛴다(캔버스 리빌드 전). 프레임을 넘겨 재확인하려 했으나 에디터가 백그라운드에서 플레이어 루프를 돌리지 않아 `Time.frameCount`가 `520`에 고정돼 리빌드가 일어나지 않았다.
+→ 다만 **회전 차단은 레이캐스트가 아니라 H5의 입력 잠금이 보증**하므로 기능 요구는 충족된다. 패널의 dim 레이캐스트는 이중 안전장치.
 
 ### Phase 7 검증 기록 — 상태 전이 계약 (2026-08-07, 플레이 모드 실측)
 
@@ -199,7 +221,9 @@
 | T7 | Clear 중 `Pause()` | `Clear` 유지 · 차단됨 |
 | T8 | Play 중 `GameOver()` | 이벤트 `[GameOver, Play]` → 타이머 `7.5`→`0`, 공 `vel=(0,0)` `angVel=0` 재활성, 중력 `(0,-14.72)` 복원 → **(b) 방침대로 계속 플레이 가능** |
 
-GC: 상태 전이 2000회에 **0 bytes** 할당. 종료 시 콘솔 에러 0건 · `timeScale=1` · 씬 non-dirty.
+종료 시 콘솔 에러 0건 · `timeScale=1` · 씬 non-dirty.
+
+> ⚠️ **GC 실측은 이 환경에서 불가능하다** (2026-08-07 확인). `GC.GetTotalMemory`, `GC.GetAllocatedBytesForCurrentThread`, `Profiler.GetMonoUsedSizeLong` 세 방법 모두 **확실히 할당하는 대조군(`float.ToString("F1")` 수만 회)이 0 bytes로 나와** 측정기 자체를 신뢰할 수 없다. 초안에 적었던 "전이 2000회 0 bytes"도 같은 깨진 방법의 산물이라 삭제했다. `Action<GameState>`가 enum을 박싱하지 않는 것은 제네릭 델리게이트의 런타임 특성이지 측정 결과가 아니다. → **실제 GC 수치는 Phase 14에서 실기기 Profiler로 확인할 것.**
 
 ## Phase 8: 색상 게이트 (USP) 🔴 **최우선 게임플레이**
 > **선행**: Phase 4 **완료 조건**: 같은 색 공만 게이트를 통과하고 다른 색은 튕겨 나온다

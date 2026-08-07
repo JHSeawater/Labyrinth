@@ -8,6 +8,56 @@
 
 ---
 
+### 📅 [2026-08-07] Phase 7 — HUD(타이머·일시정지) 구현 및 **GC 측정기 신뢰 불가 판명**
+
+* **작업 배경**: 직전에 만든 `GameManager.OnStateChanged`를 소비하는 첫 구독자로 HUD를 붙였다. 가장 단순한 구독자라 배선이 맞는지 즉시 드러난다.
+
+#### 1. 구성
+
+`Assets/Scripts/UI/HUDController.cs` 신설 + 씬 배치:
+
+```
+UICanvas
+├── HUD          (Graphic 없음 → 레이캐스트 투명)
+│   ├── TimerText    (TMP, raycastTarget = false)
+│   └── PauseButton
+└── PausePanel   (dim Image, raycastTarget = true, 기본 비활성)
+    ├── Title / ResumeButton / RetryButton
+```
+
+* **`raycastTarget = false`가 핵심**: HUD가 전체화면을 덮는데 `TimerText`가 레이캐스트를 먹으면 `InputController.IsPointerOverUI`가 `true`를 반환해 **화면 상단에서 시작한 미로 드래그가 통째로 죽는다.** 실측으로 화면 중앙 판정 `False`(통과) / 일시정지 버튼 위 `True`(차단) 확인.
+* **타이머 갱신 게이팅**: 소수 첫째 자리가 바뀔 때만 `SetText`. 값이 같아도 호출하면 TMP 메시가 재생성되므로 60fps에서 50/60이 낭비된다.
+* **버튼 콜백은 코드 `AddListener`**: 인스펙터 persistent listener는 배선이 빠져도 **콘솔 에러 없이 조용히 통과**한다 — 이 프로젝트가 반복해서 당한 실패 유형이라 코드 연결 + `OnDestroy`에서 `RemoveListener`.
+* 인스펙터 참조 5건 전부 non-null 실측 확인.
+
+#### 2. ⚠️ GC 측정기가 신뢰 불가임이 드러났다 (이 세션의 가장 중요한 발견)
+
+`SetText(format, arg)`가 정말 무할당인지 확인하려다 **대조군을 넣은 덕분에** 측정 자체가 깨져 있음을 발견했다.
+
+| 방법 | 대조군 `float.ToString("F1")` (확실히 할당) | 결론 |
+|---|---|---|
+| `GC.GetTotalMemory` | 5000회 → **0 bytes** | ❌ 신뢰 불가 |
+| `GC.GetAllocatedBytesForCurrentThread` | 5000회 → **0 bytes** | ❌ 신뢰 불가 |
+| `Profiler.GetMonoUsedSizeLong` | 20000회 → **0 bytes** | ❌ 신뢰 불가 |
+
+세 번째 방법은 `SetText` 20000회에 532,480 bytes를 보고했지만, **대조군이 0으로 나오는 측정기의 숫자는 채택할 수 없다.** (게다가 프레임이 안 흐르는 상태에서 `SetText`를 2만 번 하면 캔버스 리빌드 큐가 계속 쌓여 그 증가분일 가능성이 높다.)
+
+* **소급 정정**: 같은 날 앞선 로그의 *"상태 전이 2000회 실측 0 bytes"* 도 `GetTotalMemory` 기반이었으므로 **철회**하고, `Task.md`와 커밋 메시지의 해당 표현도 근거 없는 주장으로 표시했다. `Action<GameState>`가 박싱하지 않는 것은 제네릭 델리게이트의 런타임 특성이지 측정 결과가 아니다.
+* **교훈**: 측정에는 반드시 **양쪽 대조군**(확실히 할당 / 확실히 무할당)을 붙인다. 대조군 없이 "0 bytes"를 본 것은 측정이 아니라 착시다. → 실제 GC 수치는 Phase 14에서 실기기 Profiler로 확인.
+
+#### 3. 판정하지 못한 것 — 일시정지 패널의 레이캐스트 차단
+
+패널을 켠 **직후 같은 프레임**에 레이캐스트하면 `Image.depth == -1`이라 `GraphicRaycaster`가 그 Graphic을 건너뛴다(캔버스 리빌드 전이라 depth 미할당). 프레임을 넘겨 재확인하려 했으나 에디터가 백그라운드에서 플레이어 루프를 돌리지 않아 `Time.frameCount`가 `520`에 고정돼 리빌드가 일어나지 않았다.
+
+→ 다만 **회전 차단의 실제 보증은 레이캐스트가 아니라 `SetInputEnabled(false)`** 이고, 그쪽은 실측으로 `_inputEnabled = False`를 확인했다. `Update()`가 즉시 return하므로 레이캐스트 결과와 무관하게 드래그가 불가능하다. 패널 dim의 레이캐스트는 이중 안전장치.
+
+* **해결된 이슈**:
+  * 상태 이벤트를 소비하는 첫 구독자 확보 — 배선 경로가 실제로 동작함을 확인
+  * HUD가 전체화면을 덮으면서도 미로 조작을 막지 않는 레이캐스트 구성 확립
+  * **GC 측정 결과를 근거 없이 신뢰하던 문제** — 대조군 없는 측정을 채택했던 앞선 기록 정정
+
+---
+
 ### 📅 [2026-08-07] Phase 7 — `GameManager` 상태 이벤트 + `GameState.Pause` 구현 (방침 (b))
 
 * **작업 배경**: UI 팝업이 낄 자리를 만들기 위해 상태 변화를 외부에 알릴 수단이 필요했다. 두 가지 진행 방식 중 **(b) 이벤트만 먼저 추가하고 `FastRetry()` 자동 호출은 팝업 완성까지 유지**를 채택 — 이 프로젝트는 콘솔 에러 없이 조용히 깨지는 결함 이력이 있어, 언제든 플레이해서 눈으로 확인할 수 있는 상태를 유지하는 쪽이 안전하다.
@@ -28,7 +78,7 @@ private void SetState(GameState next)
 * **인스턴스 이벤트가 아닌 이유**: 구독자(UI)가 `GameManager.Instance.OnStateChanged += ...`를 `OnEnable`에서 하면 **`GameManager.Awake`보다 먼저 돌 경우 `Instance`가 null이라 구독이 조용히 실패**한다. 이건 직전에 수정한 `IsPointerOverGameObject` 버그와 **정확히 같은 종류의 실행 순서 의존**이다. static이면 인스턴스 존재 여부와 무관하게 구독이 성립한다.
 * 구독자 규약(주석에 명시): ① `OnEnable`에서 구독 + `Start`에서 `CurrentState`를 1회 직접 읽어 초기 표시를 맞춘다, ② `OnDisable`/`OnDestroy`에서 반드시 해제(CLAUDE.md §4).
 * **도메인 리로드 실측 확인**: `EditorSettings.enterPlayModeOptionsEnabled = False` → static이 플레이 세션마다 초기화되므로 안전. 다만 나중에 Fast Enter Play Mode를 켜면 구독자가 세션을 넘어 살아남으므로, `OnDestroy`에서 `Instance == this`일 때만 `OnStateChanged = null` 처리. **싱글턴 중복으로 파기되는 쪽이 전역 상태를 지우지 않도록** 가드가 필수다.
-* **GC 0**: `Action<GameState>`는 제네릭이 값 타입으로 인스턴스화되어 enum을 박싱하지 않는다. 전이 2000회 실측 **0 bytes**.
+* **박싱 없음**: `Action<GameState>`는 제네릭이 값 타입으로 인스턴스화되어 enum을 박싱하지 않는다(런타임 특성). ⚠️ 초안에 적었던 "전이 2000회 실측 0 bytes"는 **철회한다** — 같은 날 후속 작업에서 이 환경의 GC 측정기가 신뢰 불가임이 드러났다(아래 HUD 로그 §4).
 
 #### 2. `GameState.Pause` — `timeScale`만으로는 부족했던 점
 

@@ -27,6 +27,9 @@ public class GameManager : MonoBehaviour
     private float _playTimer = 0f;
 
     public GameState CurrentState { get; private set; } = GameState.Play;
+
+    /// <summary>현재 스테이지 경과 시간(초). HUD 표시용.</summary>
+    public float PlayTimer => _playTimer;
     
     private WaitForSeconds _clearDelayCache;
     private const float CLEAR_DELAY_TIME = 1.5f;
