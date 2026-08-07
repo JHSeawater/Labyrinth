@@ -8,6 +8,75 @@
 
 ---
 
+### 📅 [2026-08-07] 프로젝트 전면 점검 — 완료 표기 위조 3건 적발, Layer Matrix 수정, `Task.md` 재작성
+
+* **작업 배경**: "이전 Task들에서 문제가 계속 나온다"는 지적을 받아, 코드가 아니라 **`Task.md` 자체**를 프로젝트 완성 관점에서 감사했다. 모든 `[x]` 항목을 MCP 실측으로 대조.
+
+#### 1. 적발된 "완료 표기 ≠ 실제 상태" 3건
+
+| # | 항목 | 실측 결과 |
+|---|---|---|
+| ① | **Phase 3 색상 게이트(USP)** | 색 레이어 4종이 **정의만 되고 어떤 오브젝트에도 미할당** (공·Goal 전부 `Default(0)`), 씬·프리팹에 **Gate 오브젝트 0개**. GDD §1이 "주요 차별점(USP)"으로 규정한 기믹이 통째로 없는데 `[x]` |
+| ② | **Layer Collision Matrix** | 스펙과 **정반대**로 설정 (아래 상술) |
+| ③ | **Phase 2 피드백** | `FeedbackManager` **호출처 0건**, 코드베이스 전체에 `AudioSource`/`AudioClip`/`ParticleSystem` 참조 0건. 실체는 쿨타임 가드가 든 `PlayHaptic()` 스텁 하나 |
+
+* **①의 뼈아픈 점**: `TDD.md §5.2:114`가 *"레이어는 생성돼 있으나 공은 `Default(0)`에 있고 Matrix 미배선(게이트 기믹 미구현)"* 이라고 **정확히 기록해 두고 있었다.** TDD는 맞았고 Task.md만 닫혀 있었다 — 두 문서를 대조하는 절차가 없어 게이트가 문서 사이 틈으로 사라졌다.
+* 부수 적발: Phase 3.5 QA 항목이 `[x]`인데 주석에 "인터랙티브 플레이테스트 필요"라 적혀 있었다(자기모순).
+
+#### 2. Layer Collision Matrix 수정 (커밋 `d23ec99`)
+
+* **증상**: 꺼져 있던 유일한 두 칸이 `Gate_Yellow×Gate_Yellow` / `Gate_Green×Gate_Green` — **게이트는 정적이라 서로 충돌 계산 자체가 없으므로 아무 효과가 없는 칸**이었다. 반대로 반드시 꺼야 할 `Ball_X × Gate_X`는 켜져 있었다. 매트릭스 UI에서 대각선을 잘못 클릭한 전형적 오조작.
+* **영향**: 이 상태로 게이트를 만들었다면 **모든 공이 모든 게이트에 막혀** "왜 통과가 안 되지"로 수렴했을 것. 게이트 구현 전에 잡아서 다행.
+* **수정** (TDD §5.2 / GDD §5.1.1 "같은 색 통과 / 다른 색 차단"):
+
+  | 쌍 | 변경 |
+  |---|---|
+  | `Ball_Yellow(6) × Gate_Yellow(8)` | ON → **OFF (통과)** |
+  | `Ball_Green(7) × Gate_Green(9)` | ON → **OFF (통과)** |
+  | `Ball_X × Gate_Y` (이색) | ON 유지 (차단) |
+  | `Gate_X × Gate_X` | OFF → **ON (기본값 복원)** — 비기본 상태를 남겨두면 나중에 혼란 |
+  | 공-공 전 교차, `Default × Ball_*` | ON 유지 (GDD §5.3 / 벽·Goal·장애물 충돌 보존) |
+
+* **검증 방식**: `Physics2D.GetIgnoreLayerCollision()` 반환값을 믿지 않고, 저장된 `ProjectSettings/Physics2DSettings.asset`의 `m_LayerCollisionMatrix` 256자 헥스를 **직접 비트 디코딩**해 대조.
+  ```
+  layer 6 Ball_Yellow  mask=0xFFFFFEFF  bit8=0(통과) bit9=1(차단) bit6,7=1(공-공)
+  layer 7 Ball_Green   mask=0xFFFFFDFF  bit9=0(통과) bit8=1(차단)
+  layer 8 Gate_Yellow  mask=0xFFFFFFBF  bit6=0        bit8=1(복원)
+  layer 9 Gate_Green   mask=0xFFFFFF7F  bit7=0        bit9=1(복원)
+  ```
+  → 영속화는 `EditorApplication.ExecuteMenuItem("File/Save Project")`로 처리(런타임 API 호출만으로는 디스크에 안 남을 수 있음).
+
+#### 3. `Task.md` 전면 재작성 — 근본 원인은 "완료 기준의 부재"
+
+세 사고의 원인이 전부 같았다. 구 문서의 `[x]`는 **"그 방향으로 뭔가 했다"** 를 뜻했다 — 레이어를 *만들었으면* 체크(할당 안 함), 매니저를 *작성했으면* 체크(호출 안 함). Unity의 최빈 실패 모드인 *"코드는 맞는데 인스펙터가 비어 있음"* 을 **구조적으로 잡아낼 수 없는 문서**였다.
+
+* **도입한 완료 기준(DoD)**:
+  1. 모든 항목은 `[Code]`/`[Editor]`/`[Asset]`/`[QA]`/`[Doc]` 태그를 하나 갖는다
+  2. `[x]`는 **MCP 실측 또는 플레이 검증**으로 확인된 것만
+  3. **코드 작성과 씬/프리팹 배선은 반드시 별도 항목으로 분리**
+  4. `[QA]` 항목이 없는 Phase는 닫지 않는다
+  5. **"정의"와 "할당·배치"는 다른 항목** (①의 재발 방지)
+  6. TDD/GDD와 어긋나면 TDD 우선, 발견 즉시 양쪽 동기화
+* **Phase 번호 정상화**: 구 체계는 `1 → 1.5 → 2 → 3 → 3.5 → 4 → 5.0 → 5.1 → 5 → 6 → 7`로 **5.0/5.1이 5보다 앞에 오는** 붕괴 상태였다. 순차 1~14로 재배열하고 **구↔신 매핑표**를 문서에 넣어 `DevelopLog`/`TDD`의 과거 서술을 추적 가능하게 유지.
+* **Phase 헤더에 `선행` / `완료 조건` 필드 신설**: 의존성이 매번 사고 후에 인라인 노트로 붙던 패턴(`"Phase 5 선행 필수"`, `"세이브 → 로비 순으로"`)을 정규 필드로 승격.
+* **GDD 대비 누락 워크스트림 신설**: 색상 게이트(Phase 8) · 동적 기믹(9) · **레벨 콘텐츠·난이도·FTUE(10)** · 씬 플로우/Build Settings(11) · 오디오 에셋 확보(13) · 색맹 문양 각인(14). 구 계획은 **레벨이 1개뿐인 상태에서 상점부터 만들게** 되어 있어 GDD §11.1 MVP 순서와 어긋났다.
+
+#### 4. 함께 발견해 등록한 잠복 이슈
+
+* **카메라 에디터/런타임 불일치**: 컴포넌트 저장값 `orthographicSize = 6`, 런타임은 `Awake`가 `defaultOrthoSize = 10.5`로 덮어씀 → **에디터에서 플레이어보다 75% 좁은 화면을 보고 레벨을 만들게 된다.** `TDD.md:265`가 `6`을 "과거 오설정"으로 명시했는데 컴포넌트 값만 남아 있었다. 레벨 양산(Phase 10) 전 정리 필요
+* **`GameState.Pause`가 선언만 되고 set/read 0건** → GDD §8.1의 `[인게임] ⇄ [일시정지]` 성립 불가 (Phase 7 등록)
+* **`GameSettings` ScriptableObject 부재** — CLAUDE.md §4 요구사항. 회전 튜닝값이 `WorldRotationController.cs:12-16`에 산재 (Phase 10 등록)
+* **승/패 동시 발생 우선순위 미결** — `TDD §7.6`이 현 구현을 *first-event-wins(콜백 순서 비결정적)* 한계로 기록했으나 Task에 결정 항목이 없었다 (Phase 3 등록)
+* **`Debug.Log` 5곳 상시 출력** (`CameraController.cs:65`는 보간 문자열) — 릴리스 스트립 항목 없었음 (Phase 14 등록)
+
+* **해결된 이슈**:
+  * Layer Collision Matrix 오설정 (게이트 구현 시 100% 발현될 버그를 사전 차단)
+  * 완료 표기 위조 3건을 실제 상태로 정정
+  * `Task.md`가 사고를 구조적으로 못 잡던 결함 — DoD·태그·선행조건 규약 도입
+  * GDD 요구사항 대비 누락 워크스트림 6종 등록 (이대로 갔으면 Task 100% 완료해도 GDD의 게임이 안 나왔다)
+
+---
+
 ### 📅 [2026-08-06] Phase 5.1 — 터치 UI 무시 경로 수정: `IsPointerOverGameObject` 의존 제거
 
 * **작업 배경**: 직전 로그에서 발견한 버그(`InputController.cs:53`이 `IsPointerOverGameObject(touch.finger.index)` 호출)를 수정. 당시 조치안은 "`touch.touchId`로 교체(1줄)"였으나, **착수 후 그것만으로는 부족하다는 것이 확인되어 방식을 바꿨다.**
