@@ -17,6 +17,7 @@ public class InputController : MonoBehaviour
     private bool _isDragging = false;
     private int _currentTouchId = -1;
     private bool _isUsingTouch = false;
+    private bool _inputEnabled = true;
 
     // UI 판정용 레이캐스트 캐시 (최초 1회만 할당 → 드래그 시작마다 GC 발생 방지)
     private PointerEventData _uiPointerData;
@@ -42,6 +43,7 @@ public class InputController : MonoBehaviour
 
     private void Update()
     {
+        if (!_inputEnabled) return;
         if (_worldRotationController == null) return;
 
         // 1. 모바일 다중 터치 추적 (EnhancedTouch 기반, finger.index로 첫 번째 터치만 추적)
@@ -147,7 +149,19 @@ public class InputController : MonoBehaviour
     }
 
     /// <summary>
-    /// Fast Retry 로직 호출 시 
+    /// 회전 입력을 잠그거나 풉니다. (일시정지용 — GameManager가 호출)
+    /// Update()는 timeScale 0에서도 계속 돌기 때문에 잠그지 않으면
+    /// 일시정지 중 드래그가 목표 각도에 누적된다.
+    /// 잠글 때는 진행 중인 드래그도 함께 해제한다.
+    /// </summary>
+    public void SetInputEnabled(bool value)
+    {
+        _inputEnabled = value;
+        if (!value) ResetInput();
+    }
+
+    /// <summary>
+    /// Fast Retry 로직 호출 시
     /// 에디터(마우스) 환경 버그 방지 및 모든 드래그 변수를 초기화합니다.
     /// </summary>
     public void ResetInput()

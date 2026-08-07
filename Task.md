@@ -166,10 +166,13 @@
 > **선행**: Phase 6 완료 (Canvas · EventSystem · TMP)
 > **완료 조건**: 클리어/실패가 UI로 표시되고, 유저가 버튼으로 재시작·일시정지할 수 있다
 
-- [ ] `[Code]` **`GameManager` 상태 이벤트 노출**: `event Action<GameState>` + `OnDisable`/`OnDestroy` 해제 (CLAUDE.md §4)
-- [ ] `[Code]` **`GameState.Pause` 실구현** — 현재 enum에 선언만 되고 set/read 하는 코드가 0건이라 GDD §8.1의 `[인게임] ⇄ [일시정지]`가 성립 불가
-- [ ] `[Code]` **UI 주도 플로우로 전환**: `GameOver()`의 즉시 `FastRetry()`(`GameManager.cs:75`)와 `ClearDelayRoutine()`의 자동 `FastRetry()`(`:85`)를 제거하고 UI 버튼이 호출하도록
-      ※ 전환 중 재시작 수단이 사라지는 공백이 생기므로, 팝업 완성 전까지 임시 트리거를 유지할 것
+- [x] `[Code]` **`GameManager` 상태 이벤트 노출** (2026-08-07): `public static event Action<GameState> OnStateChanged`.
+      값이 실제로 달라졌을 때만 `SetState()`가 1회 발행. **static인 이유** — 구독자(UI)의 `OnEnable`이 `GameManager.Awake`보다 먼저 돌아도 구독이 조용히 실패하지 않게 하기 위함(실행 순서 의존 제거). 구독자는 `OnDisable`/`OnDestroy`에서 해제할 것(CLAUDE.md §4). `OnDestroy`에서 `Instance == this`일 때만 static을 정리한다
+- [x] `[Code]` **`GameState.Pause` 실구현** (2026-08-07): `Pause()` / `Resume()`.
+      `Time.timeScale = 0`으로 `FixedUpdate`를 멈춰 물리·중력 회전을 동시에 동결하고, `InputController.SetInputEnabled(false)`로 회전 입력을 잠근다 — **`Update()`는 timeScale 0에서도 계속 돌기 때문에**, 잠그지 않으면 일시정지 중 드래그가 목표 각도에 누적돼 재개 순간 미로가 튄다. `FastRetry()`가 `timeScale`을 먼저 1로 되돌려 일시정지 중 재시작해도 시간이 멈춘 채 남지 않는다
+- [x] `[QA]` **상태 전이 계약 실측** (2026-08-07, 플레이 모드): 아래 §Phase 7 검증 기록 표 참조. 전이 2000회 할당 **0 bytes**(`Action<GameState>`가 enum을 박싱하지 않음)
+- [ ] `[Code]` **UI 주도 플로우로 전환**: `GameOver()`의 즉시 `FastRetry()`(`GameManager.cs:105`)와 `ClearDelayRoutine()`의 자동 `FastRetry()`를 제거하고 UI 버튼이 호출하도록
+      ※ **(b) 방침 채택** — 지금 제거하면 재시작 수단이 통째로 사라지므로 팝업 완성까지 유지한다. 해당 줄에 제거 시점을 명시한 주석을 달아두었다(`GameManager.cs:103-104`)
 - [ ] `[Code]` HUD: 타이머 · 일시정지 버튼 (GDD §8.2 — 최소 UI로 몰입 유지)
 - [ ] `[Code]` 결과 팝업: 최종 타임 · 별 1~3 · `[재시작]` `[다음]` `[로비]` (`[다음]`/`[로비]`는 Phase 11에서 활성)
 - [ ] `[Code]` `CalculateStars()` 결과를 `Debug.LogWarning`(`:81`) 대신 UI로 전달
@@ -178,7 +181,25 @@
 - [ ] `[Code]` **Safe Area 대응** 스크립트 (CLAUDE.md §6)
 - [ ] `[Editor]` Safe Area 스크립트를 최상단 UI 패널에 부착
 - [ ] `[QA]` 클리어/실패 → 팝업 표시 → 버튼 재시작까지 플레이 검증, 콘솔 에러 0건
-- [ ] `[QA]` 일시정지 중 타이머·물리가 실제로 멈추는지 검증
+- [ ] `[QA]` **일시정지 중 타이머·물리가 실제로 멈추는지 프레임 경과 검증** — ⚠️ **MCP로 검증 불가, 인터랙티브 플레이테스트 필요.**
+      에디터가 백그라운드일 때 플레이어 루프를 돌리지 않아 `Time.frameCount`가 realtime 47초 동안 `3`에 고정됐다(일시정지 여부와 무관, `timeScale=1`·`state=Play`로 되돌려도 동일). 즉 **프레임이 아예 안 흘러 "멈췄다"를 증명할 수 없다.**
+      메커니즘 자체는 이중으로 보장된다 — `timeScale=0`이면 `Time.deltaTime==0`이고 `FixedUpdate`가 호출되지 않으며, `Update()`에도 `CurrentState == Play` 가드가 있다. 그래도 실측 전까지 `[ ]` 유지.
+
+### Phase 7 검증 기록 — 상태 전이 계약 (2026-08-07, 플레이 모드 실측)
+
+| # | 시나리오 | 결과 |
+|---|---|---|
+| T0 | 초기 | `state=Play` `timeScale=1` `inputEnabled=True` · 이벤트 없음 |
+| T1 | `Pause()` | `Pause` / `0` / `False` · 이벤트 `[Pause]` 1회 |
+| T2 | `Pause()` 재호출 | 변화 없음 · **이벤트 추가 발행 없음**(멱등) |
+| T3 | Pause 중 `GameOver()` | `Pause` 유지 · 무시됨 |
+| T4 | `Resume()` | `Play` / `1` / `True` · 이벤트 `[Play]` |
+| T5 | `Resume()` 재호출 | 변화 없음 · 이벤트 없음 |
+| T6 | Pause 후 `FastRetry()` | `Play` / **`timeScale=1` 복원** / `True` |
+| T7 | Clear 중 `Pause()` | `Clear` 유지 · 차단됨 |
+| T8 | Play 중 `GameOver()` | 이벤트 `[GameOver, Play]` → 타이머 `7.5`→`0`, 공 `vel=(0,0)` `angVel=0` 재활성, 중력 `(0,-14.72)` 복원 → **(b) 방침대로 계속 플레이 가능** |
+
+GC: 상태 전이 2000회에 **0 bytes** 할당. 종료 시 콘솔 에러 0건 · `timeScale=1` · 씬 non-dirty.
 
 ## Phase 8: 색상 게이트 (USP) 🔴 **최우선 게임플레이**
 > **선행**: Phase 4 **완료 조건**: 같은 색 공만 게이트를 통과하고 다른 색은 튕겨 나온다

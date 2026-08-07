@@ -8,6 +8,64 @@
 
 ---
 
+### 📅 [2026-08-07] Phase 7 — `GameManager` 상태 이벤트 + `GameState.Pause` 구현 (방침 (b))
+
+* **작업 배경**: UI 팝업이 낄 자리를 만들기 위해 상태 변화를 외부에 알릴 수단이 필요했다. 두 가지 진행 방식 중 **(b) 이벤트만 먼저 추가하고 `FastRetry()` 자동 호출은 팝업 완성까지 유지**를 채택 — 이 프로젝트는 콘솔 에러 없이 조용히 깨지는 결함 이력이 있어, 언제든 플레이해서 눈으로 확인할 수 있는 상태를 유지하는 쪽이 안전하다.
+
+#### 1. 상태 변경 이벤트 — `static`을 택한 이유
+
+```csharp
+public static event Action<GameState> OnStateChanged;
+
+private void SetState(GameState next)
+{
+    if (CurrentState == next) return;   // 실제로 달라졌을 때만 1회 발행
+    CurrentState = next;
+    OnStateChanged?.Invoke(next);
+}
+```
+
+* **인스턴스 이벤트가 아닌 이유**: 구독자(UI)가 `GameManager.Instance.OnStateChanged += ...`를 `OnEnable`에서 하면 **`GameManager.Awake`보다 먼저 돌 경우 `Instance`가 null이라 구독이 조용히 실패**한다. 이건 직전에 수정한 `IsPointerOverGameObject` 버그와 **정확히 같은 종류의 실행 순서 의존**이다. static이면 인스턴스 존재 여부와 무관하게 구독이 성립한다.
+* 구독자 규약(주석에 명시): ① `OnEnable`에서 구독 + `Start`에서 `CurrentState`를 1회 직접 읽어 초기 표시를 맞춘다, ② `OnDisable`/`OnDestroy`에서 반드시 해제(CLAUDE.md §4).
+* **도메인 리로드 실측 확인**: `EditorSettings.enterPlayModeOptionsEnabled = False` → static이 플레이 세션마다 초기화되므로 안전. 다만 나중에 Fast Enter Play Mode를 켜면 구독자가 세션을 넘어 살아남으므로, `OnDestroy`에서 `Instance == this`일 때만 `OnStateChanged = null` 처리. **싱글턴 중복으로 파기되는 쪽이 전역 상태를 지우지 않도록** 가드가 필수다.
+* **GC 0**: `Action<GameState>`는 제네릭이 값 타입으로 인스턴스화되어 enum을 박싱하지 않는다. 전이 2000회 실측 **0 bytes**.
+
+#### 2. `GameState.Pause` — `timeScale`만으로는 부족했던 점
+
+`Time.timeScale = 0`이면 `FixedUpdate`가 멈춰 물리와 중력 회전이 함께 동결된다. 그런데 **`Update()`는 timeScale 0에서도 계속 돈다.** `InputController.Update()`가 그대로 살아 있어 일시정지 중 드래그가 `_targetAngle`에 누적되고, 재개하는 순간 미로가 그 각도로 튄다.
+
+→ `InputController.SetInputEnabled(bool)`을 신설해 `GameManager`가 명시적으로 잠근다(잠글 때 진행 중인 드래그도 `ResetInput()`으로 해제). `InputController`가 `GameManager`를 역참조하지 않도록 기존 `_inputController` 직렬화 참조 패턴을 그대로 따랐다.
+
+또 하나 — **일시정지 중 재시작하면 `timeScale`이 0인 채로 남는다.** `FastRetry()` 맨 앞에서 `Time.timeScale = 1f`를 먼저 되돌리도록 처리.
+
+#### 3. 검증 (플레이 모드 실측)
+
+| # | 시나리오 | 결과 |
+|---|---|---|
+| T1 | `Pause()` | `Pause` / `timeScale=0` / `inputEnabled=False` · 이벤트 1회 |
+| T2 | `Pause()` 재호출 | **이벤트 추가 발행 없음** (멱등) |
+| T3 | Pause 중 `GameOver()` | 무시됨 |
+| T4/T5 | `Resume()` / 재호출 | `Play`/`1`/`True` · 재호출은 무발행 |
+| T6 | Pause 후 `FastRetry()` | **`timeScale=1` 복원** |
+| T7 | Clear 중 `Pause()` | 차단됨 |
+| T8 | Play 중 `GameOver()` | `[GameOver, Play]` → 타이머 `7.5`→`0`, 공 `vel=(0,0)` 재활성, 중력 `(0,-14.72)` 복원 |
+
+T8이 (b) 방침의 핵심 — **실패해도 즉시 다시 굴릴 수 있는 상태가 유지된다.**
+
+#### 4. ⚠️ 검증하지 못한 것 (도구 한계)
+
+"일시정지 중 타이머·물리가 **프레임이 흐르는 동안** 멈추는지"는 확인하지 못했다. 에디터가 백그라운드일 때 플레이어 루프를 돌리지 않아 **`Time.frameCount`가 realtime 47초 동안 `3`에 고정**됐다 — `timeScale=1`·`state=Play`로 되돌려도 동일했으므로 내 코드가 아니라 에디터 포커스 게이팅이다(직전 세션의 터치 시뮬레이션을 막았던 것과 같은 원인). 프레임이 아예 안 흐르니 "멈췄다"를 증명할 수 없다.
+
+메커니즘 자체는 이중 보장(`timeScale=0` → `Time.deltaTime==0` + `FixedUpdate` 미호출, 그리고 `Update()`의 `CurrentState == Play` 가드)이지만, **새 DoD 규칙 2에 따라 `Task.md`의 해당 `[QA]` 항목은 `[ ]`로 남겼다.** 인터랙티브 플레이테스트에서 확인할 것.
+
+* **해결된 이슈**:
+  * UI가 붙을 상태 변화 훅 부재 → static 이벤트로 실행 순서 의존 없이 해결
+  * `GameState.Pause`가 선언만 되고 동작하지 않던 문제 (GDD §8.1 `[인게임] ⇄ [일시정지]` 성립)
+  * 일시정지 중 드래그 누적으로 재개 시 미로가 튀는 문제 (구현 전 선제 차단)
+  * 일시정지 중 재시작 시 `timeScale`이 0으로 잔류하는 문제 (구현 전 선제 차단)
+
+---
+
 ### 📅 [2026-08-07] 프로젝트 전면 점검 — 완료 표기 위조 3건 적발, Layer Matrix 수정, `Task.md` 재작성
 
 * **작업 배경**: "이전 Task들에서 문제가 계속 나온다"는 지적을 받아, 코드가 아니라 **`Task.md` 자체**를 프로젝트 완성 관점에서 감사했다. 모든 `[x]` 항목을 MCP 실측으로 대조.
