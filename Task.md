@@ -171,8 +171,9 @@
 - [x] `[Code]` **`GameState.Pause` 실구현** (2026-08-07): `Pause()` / `Resume()`.
       `Time.timeScale = 0`으로 `FixedUpdate`를 멈춰 물리·중력 회전을 동시에 동결하고, `InputController.SetInputEnabled(false)`로 회전 입력을 잠근다 — **`Update()`는 timeScale 0에서도 계속 돌기 때문에**, 잠그지 않으면 일시정지 중 드래그가 목표 각도에 누적돼 재개 순간 미로가 튄다. `FastRetry()`가 `timeScale`을 먼저 1로 되돌려 일시정지 중 재시작해도 시간이 멈춘 채 남지 않는다
 - [x] `[QA]` **상태 전이 계약 실측** (2026-08-07, 플레이 모드): 아래 §Phase 7 검증 기록 표 참조
-- [ ] `[Code]` **UI 주도 플로우로 전환**: `GameOver()`의 즉시 `FastRetry()`(`GameManager.cs:105`)와 `ClearDelayRoutine()`의 자동 `FastRetry()`를 제거하고 UI 버튼이 호출하도록
-      ※ **(b) 방침 채택** — 지금 제거하면 재시작 수단이 통째로 사라지므로 팝업 완성까지 유지한다. 해당 줄에 제거 시점을 명시한 주석을 달아두었다(`GameManager.cs:103-104`)
+- [x] `[Code]` **UI 주도 플로우로 전환** (2026-08-07) — ⚠️ **범위를 GDD 기준으로 정정했다.**
+      초안은 "`GameOver()`의 즉시 `FastRetry()`도 제거"였으나 **GDD §2가 명시적으로 반대**다: *"패배: 공 하나라도 함정/장외 → **즉시 Fast Retry(같은 자리에서 재도전)**"*. 로딩도 팝업도 없는 즉시 반복이 코어 루프의 의도이므로 `GameOver()`의 `FastRetry()`는 **임시 조치가 아니라 기획 자체**다 → 유지.
+      제거한 것은 `ClearDelayRoutine()`의 자동 `FastRetry()` 하나뿐이고, 그 자리에 `OnStageCleared(별, 타임)` 발행을 넣었다. **결과 화면은 승리 전용**(GDD §8.1 화면 전이도와도 일치)
 - [x] `[Code]` **HUD: 타이머 · 일시정지 버튼** (2026-08-07) — `Assets/Scripts/UI/HUDController.cs`.
       `GameManager.OnStateChanged` 구독(`OnEnable` 구독 / `OnDisable` 해제) + `Start`에서 `CurrentState`를 1회 직접 읽어 초기 표시를 맞춘다(이벤트는 구독 이후의 "변화"만 알려주므로).
       타이머는 **소수 첫째 자리가 바뀔 때만** 갱신(`_lastShownTenths`) — 값이 그대로여도 `SetText`하면 TMP 메시가 재생성되어 60fps 중 50/60이 낭비된다.
@@ -180,9 +181,13 @@
 - [x] `[Editor]` **HUD · 일시정지 패널 씬 배치** (2026-08-07): `UICanvas/HUD/{TimerText, PauseButton}` + `UICanvas/PausePanel/{Title, ResumeButton, RetryButton}`.
       `HUD` 루트는 Graphic이 없고 `TimerText.raycastTarget = false` → **전체화면을 덮어도 미로 드래그를 삼키지 않는다**(실측 확인). `PausePanel`의 dim Image는 `raycastTarget = true` 유지
 - [x] `[Editor]` **인스펙터 배선 5건** 전부 non-null 확인: `_timerText` `_pausePanel` `_pauseButton` `_resumeButton` `_retryButton`
-- [ ] `[Code]` 결과 팝업: 최종 타임 · 별 1~3 · `[재시작]` `[다음]` `[로비]` (`[다음]`/`[로비]`는 Phase 11에서 활성)
-- [ ] `[Code]` `CalculateStars()` 결과를 `Debug.LogWarning`(`GameManager.cs:81`) 대신 UI로 전달
-- [ ] `[Editor]` 결과 팝업 씬 배치 및 배선
+- [x] `[Code]` **결과 팝업** (2026-08-07) — `Assets/Scripts/UI/ResultPopupController.cs`. 최종 타임 · 별 1~3 · `[다시하기]`.
+      `[다음]`/`[로비]`는 갈 곳(로비 씬·스테이지 레지스트리)이 Phase 11에서 생기므로 `interactable = false`로 두어 의도를 드러냄
+- [x] `[Code]` **`CalculateStars()` 결과를 UI로 전달** — `Debug.LogWarning` 제거하고 `OnStageCleared(별, 타임)` 이벤트 페이로드로 전달
+- [x] `[Code]` **구독자 부재 시 소프트락 방지**: `OnStageCleared`에 구독자가 없으면 경고를 남기고 `FastRetry()`로 자동 복구. 배선 실수가 "재시작 불가"라는 복구 불능 상태로 이어지지 않게
+- [x] `[Editor]` **결과 팝업 씬 배치 및 배선 8건** 전부 non-null (`_panel` `_timeText` `_retryButton` `_nextButton` `_lobbyButton` + `_starImages[3]`).
+      별은 아트 에셋이 없어 **사각 Image 플레이스홀더**(획득=금색 / 미획득=반투명) — Phase 13에서 별 스프라이트로 교체
+- [x] `[QA]` **결과 팝업 동작 실측** (2026-08-07): 아래 §Phase 7 검증 기록 표 참조. **실제 클리어 경로(공 2개 골인 → 1.5초 코루틴 → 팝업)까지 통과**
 - [ ] `[Editor]` **HUD·팝업 프리팹화** — 현재는 씬에 직접 배치했다. 로비 씬 신설(Phase 11) 시 재사용하려면 프리팹이 필요
 - [ ] `[Code]` **Safe Area 대응** 스크립트 (CLAUDE.md §6)
 - [ ] `[Editor]` Safe Area 스크립트를 최상단 UI 패널에 부착
@@ -190,6 +195,25 @@
 - [ ] `[QA]` **일시정지 중 타이머·물리가 실제로 멈추는지 프레임 경과 검증** — ⚠️ **MCP로 검증 불가, 인터랙티브 플레이테스트 필요.**
       에디터가 백그라운드일 때 플레이어 루프를 돌리지 않아 `Time.frameCount`가 realtime 47초 동안 `3`에 고정됐다(일시정지 여부와 무관, `timeScale=1`·`state=Play`로 되돌려도 동일). 즉 **프레임이 아예 안 흘러 "멈췄다"를 증명할 수 없다.**
       메커니즘 자체는 이중으로 보장된다 — `timeScale=0`이면 `Time.deltaTime==0`이고 `FixedUpdate`가 호출되지 않으며, `Update()`에도 `CurrentState == Play` 가드가 있다. 그래도 실측 전까지 `[ ]` 유지.
+
+### Phase 7 검증 기록 — 결과 팝업 (2026-08-07, 플레이 모드 실측)
+
+| # | 시나리오 | 결과 |
+|---|---|---|
+| R1 | 초기 | `ResultPanel` 비활성 |
+| R2 | `[다음]`/`[로비]` | 둘 다 `interactable = False` |
+| R3 | 결과 발행 (별2, 12.34초) | 팝업 표시 · `'12.3s'` · `★★☆` |
+| R4 | `[다시하기]` 클릭 | 팝업 닫힘 — **아래 결함 수정 후 통과** |
+| R5/R6 | 별3 / 별1 발행 | `★★★` / `★☆☆` |
+| **E1** | **실제 경로**: 공1 골인 | `state=Play` (아직 전원 도달 아님) |
+| **E2** | 공2 골인 | `state=Clear` · 코루틴 시작 |
+| **E3** | 1.5초 경과(프레임 291→504) | **팝업 표시** · `★★★`(0.0초 클리어) |
+| **E4** | 팝업에서 `[다시하기]` | `state=Play` · 팝업 닫힘 · 타이머 `0.00` · `reached=0` · `timeScale=1` |
+| **E5** | `GameOver()` | `state=Play` · **팝업 안 뜸** (GDD §2 즉시 재시작) |
+
+콘솔 에러/경고 0건 — `OnStageCleared` 구독자 부재 경고가 뜨지 않았으므로 배선도 실제로 살아 있다.
+
+> 🐞 **R4에서 실제 결함 발견·수정**: 팝업이 `OnStateChanged`로만 닫히도록 되어 있었는데, `SetState()`는 값이 실제로 달라질 때만 발행하므로 **이미 `Play`인 상태에서 `FastRetry()`가 불리면 이벤트가 오지 않아 팝업이 열린 채 남는다.** 실제 흐름(`Clear → Play`)에서는 우연히 동작하지만 상태 전이에 의존하는 구조 자체가 취약하다. → `OnRetryPressed()`에서 패널을 **직접 닫도록** 수정.
 
 ### Phase 7 검증 기록 — HUD 동작 (2026-08-07, 플레이 모드 실측)
 

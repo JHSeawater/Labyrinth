@@ -8,6 +8,61 @@
 
 ---
 
+### 📅 [2026-08-07] Phase 7 — 결과 팝업 구현 및 **Task.md 항목이 GDD와 어긋난 것을 발견·정정**
+
+#### 1. 착수 직전에 걸러낸 것 — "패배 시 즉시 재시작"은 임시 조치가 아니라 기획
+
+내가 `Task.md`에 써둔 항목은 *"`GameOver()`의 즉시 `FastRetry()`와 `ClearDelayRoutine()`의 자동 `FastRetry()`를 **둘 다** 제거하고 UI 버튼이 호출하도록"* 이었다. 구현 전 GDD를 대조하니 **§2 코어 루프가 명시적으로 반대**였다:
+
+> * 승리: 모든 공이 제 색 Goal 도달 → **결과 화면(타임·별)**
+> * 패배: 공 하나라도 함정/장외 → **즉시 Fast Retry(같은 자리에서 재도전)**
+
+§2는 이어서 *"실패해도 로딩 없이 즉시 재시작되어 '한 번 더'의 쾌적한 반복을 만든다"* 고 못박는다. 즉 **패배에 팝업을 끼우는 건 코어 루프를 망가뜨리는 변경**이었다. §8.1 화면 전이도의 `[결과(Results)]`도 승리 경로에만 달려 있다.
+
+→ 제거한 것은 `ClearDelayRoutine()`의 자동 `FastRetry()` **하나뿐**. `GameOver()`의 호출은 유지하고 "이건 기획 의도"라는 근거 주석을 달았다. `Task.md` 항목도 정정.
+→ 새 DoD 규칙 6("TDD/GDD와 어긋나면 문서가 우선, 발견 즉시 맞춘다")이 실제로 작동한 첫 사례다.
+
+#### 2. 구현
+
+```csharp
+// GameManager
+public static event Action<int, float> OnStageCleared;   // (획득 별, 클리어 타임)
+
+private IEnumerator ClearDelayRoutine()
+{
+    int earnedStars = CalculateStars();
+    float clearTime = _playTimer;
+    yield return _clearDelayCache;          // 마지막 공이 들어가는 장면을 보여준 뒤
+
+    if (OnStageCleared != null) OnStageCleared.Invoke(earnedStars, clearTime);
+    else { Debug.LogWarning("...구독자 없음..."); FastRetry(); }   // 소프트락 방지
+}
+```
+
+* **별점을 페이로드로 전달**: `CalculateStars()`는 private이라 UI가 직접 못 읽는다. 이벤트에 실어 보내면 UI가 `GameManager` 내부를 뒤질 필요가 없다. 기존 `Debug.LogWarning`은 제거.
+* **구독자 부재 시 자동 복구**: 자동 `FastRetry()`를 없앤 대가로, 팝업 배선이 빠지면 **재시작 수단이 사라져 소프트락**이 된다. 조용히 멈추는 대신 경고를 남기고 복구한다 — 이 프로젝트가 반복해서 당한 "콘솔 에러 없이 조용히 깨짐"을 막는 장치.
+* `ResultPopupController` 신설(씬 `UICanvas/ResultPanel`). 별은 아트가 없어 **사각 Image 플레이스홀더**(획득=금색/미획득=반투명), Phase 13에서 스프라이트 교체. `[다음]`/`[로비]`는 갈 곳이 Phase 11에 생기므로 `interactable = false`.
+
+#### 3. 🐞 검증 중 실제 결함 발견 — 상태 전이에 의존한 팝업 닫기
+
+인위적으로 `OnStageCleared`를 발행한 뒤 `[다시하기]`를 눌렀더니 **팝업이 안 닫혔다.**
+
+원인: 팝업이 `OnStateChanged`로만 닫히는데, `SetState()`는 **값이 실제로 달라질 때만** 발행한다. 이미 `Play`인 상태에서 `FastRetry()`가 불리면 이벤트가 오지 않아 팝업이 열린 채 남는다.
+
+실제 흐름(`Clear → Play`)에서는 상태가 바뀌므로 **우연히 동작한다.** 그래서 실경로만 봤다면 못 잡았을 결함이다. 상태 *전이*에 UI 표시를 매다는 구조 자체가 취약하므로, `OnRetryPressed()`에서 패널을 **직접 닫도록** 고쳤다.
+
+#### 4. 검증
+
+인위 발행 경로(R1~R6)에 더해 **실제 클리어 경로**를 끝까지 태웠다 — 공1 골인(`Play` 유지) → 공2 골인(`Clear`) → 프레임 291→504 경과로 1.5초 코루틴 완료 → **팝업 표시(`★★★`)** → `[다시하기]` → `Play` 복귀, 타이머 `0.00`, `reached=0`, `timeScale=1`. `GameOver()`는 팝업 없이 즉시 재시작(GDD §2). 콘솔 에러/경고 0건.
+
+* **해결된 이슈**:
+  * `Task.md` 항목이 GDD 코어 루프와 어긋난 것을 **구현 전에** 발견·정정
+  * 클리어 결과(타임·별)가 콘솔 로그로만 나오던 문제 → UI 표시
+  * 자동 `FastRetry()` 제거로 생길 수 있는 소프트락 위험을 경고+자동복구로 차단
+  * 상태 전이 의존 때문에 특정 경로에서 팝업이 닫히지 않던 결함
+
+---
+
 ### 📅 [2026-08-07] Phase 7 — HUD(타이머·일시정지) 구현 및 **GC 측정기 신뢰 불가 판명**
 
 * **작업 배경**: 직전에 만든 `GameManager.OnStateChanged`를 소비하는 첫 구독자로 HUD를 붙였다. 가장 단순한 구독자라 배선이 맞는지 즉시 드러난다.

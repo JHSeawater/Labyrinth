@@ -17,6 +17,12 @@ public class GameManager : MonoBehaviour
     /// </summary>
     public static event Action<GameState> OnStateChanged;
 
+    /// <summary>
+    /// 클리어 연출 대기가 끝나고 결과를 표시할 시점에 발행됩니다. (획득 별 수, 클리어 타임)
+    /// 패배(GameOver)는 GDD §2에 따라 팝업 없이 즉시 재시작하므로 이 이벤트를 쓰지 않는다.
+    /// </summary>
+    public static event Action<int, float> OnStageCleared;
+
     [SerializeField] private WorldRotationController _worldRotationController;
     [SerializeField] private InputController _inputController;
     [SerializeField] private StageData _currentStageData;
@@ -56,6 +62,7 @@ public class GameManager : MonoBehaviour
         // 현재 프로젝트는 도메인 리로드가 켜져 있어 static이 자동 초기화되지만,
         // Fast Enter Play Mode를 켜는 순간 구독자가 세션을 넘어 살아남는다.
         OnStateChanged = null;
+        OnStageCleared = null;
         Time.timeScale = 1f;
     }
 
@@ -103,8 +110,9 @@ public class GameManager : MonoBehaviour
         if (CurrentState != GameState.Play) return;
         SetState(GameState.GameOver);
 
-        // ⚠️ 결과 팝업이 붙으면 이 줄을 지우고 UI의 [재시작] 버튼이 FastRetry()를 호출한다.
-        //    지금 지우면 재시작 수단이 통째로 사라지므로 팝업 완성까지 유지한다. (Task.md Phase 7)
+        // GDD §2: 패배는 결과 화면 없이 "즉시 Fast Retry(같은 자리에서 재도전)".
+        // 로딩도 팝업도 없는 즉시 반복이 코어 루프의 의도이므로 이 호출은 유지한다.
+        // (결과 화면은 승리 전용 — ClearDelayRoutine 참조)
         FastRetry();
     }
 
@@ -139,12 +147,24 @@ public class GameManager : MonoBehaviour
 
     private IEnumerator ClearDelayRoutine()
     {
+        // 상태가 Clear라 Update()가 타이머를 더 올리지 않지만, 의도를 분명히 하려고 여기서 확정한다.
         int earnedStars = CalculateStars();
-        Debug.LogWarning($"[Stage Clear] Time: {_playTimer:F1}s | Stars: {earnedStars}개 획득!", this);
-        
+        float clearTime = _playTimer;
+
+        // 마지막 공이 골에 들어가는 장면을 보여준 뒤 결과를 띄운다.
         yield return _clearDelayCache;
-        // 추후 로비로 넘어가는 등 분기 추가를 위한 자리
-        FastRetry();
+
+        if (OnStageCleared != null)
+        {
+            OnStageCleared.Invoke(earnedStars, clearTime);
+        }
+        else
+        {
+            // 결과 팝업이 배선되지 않으면 재시작 수단이 없어 소프트락이 된다.
+            // 조용히 멈추는 대신 경고를 남기고 자동 복구한다.
+            Debug.LogWarning("[GameManager] OnStageCleared 구독자가 없습니다. 결과 팝업 배선을 확인하세요. 자동 재시작합니다.", this);
+            FastRetry();
+        }
     }
 
     private int CalculateStars()
