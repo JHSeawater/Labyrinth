@@ -56,7 +56,9 @@ public class ResultPopupController : MonoBehaviour
 
     private void HandleStageCleared(int stars, float clearTime)
     {
-        if (_timeText != null) _timeText.SetText("{0:1}s", clearTime);
+        // HUD와 동일하게 0.1초 단위 버림. TMP의 {0:1} 포맷은 반올림(내부에서 0.05를 더한 뒤 자름)이라
+        // 원시값을 그대로 넘기면 HUD(버림) 표시와 0.1초 어긋나 보인다.
+        if (_timeText != null) _timeText.SetText("{0:1}s", Mathf.FloorToInt(clearTime * 10f) * 0.1f);
 
         if (_starImages != null)
         {
