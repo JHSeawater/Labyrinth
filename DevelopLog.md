@@ -8,6 +8,36 @@
 
 ---
 
+### 📅 [2026-08-15] 씬 셋업 전수 실측(`/qa-scene`) — 카메라 `orthographicSize` 정정
+
+#### 1. 배경
+
+`TDD.md` 부록 "에디터 셋업 검증 체크리스트" 14항을 MCP로 전수 실측했다(읽기 전용 스캔). Phase 8 착수 전에 씬 상태를 확정해 두기 위함.
+
+#### 2. 실측 결과 — 13항 통과 / 1항 실패
+
+통과 항목 중 근거를 남길 만한 것:
+
+* **Maze 고정**: `Static` RB, world `(0,0,0)`, rotZ `0` — B방식 불변식 유지.
+* **Composite 병합**: `TilemapCollider2D` + `RoundWall_0/PolygonCollider2D` 모두 `usedByComposite=True`, `attachedRB=Maze(Static)`, 자식 머티리얼 `null`. 단일 `Wall Physics Material`이 Composite에 걸려 일괄 지배(§6.1). SpriteShape는 `isOpenEnded=False`, `colliderOffset=0.5`(§6.1.1 확정값).
+* **DeadZone**: 4개 콜라이더의 offset/size가 `TDD §7.4` 표와 **완전 일치**, 전부 `Is Trigger`. 안쪽 경계 `±6` vs 미로 `±4` vs 공 시작 `(0.5,1.5)`·`(1.5,−2.5)` → 겹침 없음. 좌우 박스가 `y −16~16` 전 구간을 덮어 모서리 빈틈 없음.
+* **Layer Collision Matrix**: OFF 쌍이 정확히 2개(`Ball_Yellow×Gate_Yellow`, `Ball_Green×Gate_Green`)이고 공-공 전 쌍 ON. `ProjectSettings/Physics2DSettings.asset`의 `m_LayerCollisionMatrix` 비트 디코드와 `Physics2D.GetIgnoreLayerCollision` 결과가 mismatch 0으로 일치.
+* **배선**: `GameManager` 3필드, `HUDController` 5필드, `ResultPopupController` 8필드 전부 non-null. `SafeAreaFitter`는 `HUD`에만 부착(설계 의도대로).
+
+#### 3. 해결된 이슈 — 씬 카메라 `orthographicSize` = `6`
+
+Phase 5의 미결 항목이 그대로 남아 있음을 재확인하고 정정했다.
+
+* **현상**: 씬 저장값 `6`, 스크립트 `defaultOrthoSize` `10.5`. 런타임은 `CameraController.Awake() → AdjustCameraViewport()`가 항상 덮어쓰므로 **플레이 중에는 정상**이었고, 그래서 플레이테스트로는 잡히지 않았다.
+* **영향**: 플레이 전 Scene/Game 뷰에서 가로 반폭이 `6 × 0.5625 = 3.375`뿐이라 미로 반폭 `4`를 담지 못해 **에디터에서 미로가 좌우로 잘려 보였다.** 이 뷰로 레벨을 배치하면(Phase 10) 감각이 어긋난다.
+* **수정**: 씬의 `Main Camera.orthographicSize`를 `10.5`로 정정하고 저장. 씬 디프는 `orthographic size: 6 → 10.5` 한 줄. 코드 변경 없음 — 런타임 동작은 이전과 완전히 동일하고(현재 Game 뷰 1080×1920 = `targetAspect` → `else` 분기 → `10.5`), 에디터 뷰만 실제 플레이 화면과 일치하게 됐다.
+
+#### 4. 미착수로 확인된 것 (실패 아님)
+
+공 2개가 아직 `Default(0)` 레이어이고 게이트 오브젝트가 없어 **Matrix 배선은 현재 실효가 없다.** 둘 다 Phase 8 범위. 그 외 인터랙티브 검증 필요 항목(좁은 통로 교착 — Phase 4 미결, 터널링, UI 터치 배제, 골인 공 부활)은 이 스캔으로 판정 불가라 사용자 실플레이 체크리스트로 남겼다.
+
+---
+
 ### 📅 [2026-08-08] Phase 7 완료 — Safe Area 대응 (`SafeAreaFitter`)
 
 #### 1. 구현

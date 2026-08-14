@@ -153,8 +153,9 @@
 - [x] `[QA]` **동적 기믹 독립 콜라이더 워크플로우 검증** (2026-07-30): `Used By Composite` 미사용 시 Composite `shapeCount` 불변 확인, **자체 Kinematic `Rigidbody2D` 필수** 조건 발견 (TDD §6.2)
 - [x] `[Editor]` **곡선 벽 실제 저작** (2026-08-06): `Collider Offset = 0.5`로 시각/충돌 정렬, `Assets/Prefabs/RoundWall_0.prefab` 프리팹화
 - [x] `[QA]` **Composite 병합 실측**: `MazeGrid/Maze/Wall_SpriteShape_01` — `shapeCount` 15→16, `pathCount` 2→3, `pointCount` 32→37
-- [ ] `[Editor]` **⚠️ 씬 카메라 `orthographicSize` 정정**: 컴포넌트 저장값이 `6`인데 런타임은 `Awake`가 `defaultOrthoSize = 10.5`로 덮어쓴다.
-      → **에디터에서 플레이어보다 75% 좁은 화면을 보고 레벨을 만들게 된다.** `TDD.md §9`가 `6`을 "과거 오설정"으로 명시. 레벨 양산(Phase 10) 전 반드시 정리.
+- [x] `[Editor]` **⚠️ 씬 카메라 `orthographicSize` 정정** (2026-08-15): 컴포넌트 저장값이 `6`인데 런타임은 `Awake`가 `defaultOrthoSize = 10.5`로 덮어썼다.
+      → **에디터에서 플레이어보다 좁은 화면을 보고 레벨을 만들게 된다**(반폭 `6 × 0.5625 = 3.375` < 미로 반폭 `4`). `TDD.md §9`가 `6`을 "과거 오설정"으로 명시.
+      **씬 저장값을 `10.5`로 정정** — 코드 변경 없음(런타임 결과는 이전과 동일), 에디터 뷰가 실제 플레이 화면과 일치하게 됨. 레벨 양산(Phase 10) 선행 조건 해소.
 
 ## Phase 6: UI 기반 셋업 ✅ *(구 Phase 5.0)*
 > **선행**: Phase 3 **완료 조건**: 화면에 UI를 띄우고 클릭을 받을 수 있다
