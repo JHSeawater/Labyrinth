@@ -64,6 +64,9 @@
 * 에러/버그 피드백을 받으면 원인을 함부로 추측해 코드를 던지지 마라.
 * 먼저 MCP로 **Unity Console을 직접 읽어** 에러(StackTrace)를 확인하거나, 불가하면 "Console의 붉은 에러 메시지 전체를 붙여넣어 주세요"라고 요청한다.
 
+씬/프리팹 편집 가드 (훅으로 강제됨):
+* `.unity` / `.prefab`을 `Edit`·`Write`로 직접 편집하려 하면 **훅이 실행 전에 차단**한다(`.claude/settings.json`). 오류가 아니라 의도된 가드다 — 우회하지 말고 **UnityMCP 도구**(`manage_scene` / `manage_gameobject` / `manage_components` / `manage_prefabs`)를 사용한다. 배경·검증 내역은 `DevelopLog.md` 2026-08-15 항목.
+
 ---
 
 ## 3. 코어 아키텍처 (Core Architecture) [CRITICAL]
