@@ -1,9 +1,9 @@
 # 프로젝트 작업 목록 (Task List)
 
 > 기획 근거는 `GDD.md`(무엇/왜), 구현 스펙은 `TDD.md`(어떻게), 작업 규칙·아키텍처는 `CLAUDE.md`.
-> **현재 위치: Phase 7 완료 (2026-08-08) → Phase 8 (색상 게이트 · USP) 착수 대기.**
+> **현재 위치: Phase 8 (색상 게이트 · USP) 착수 대기 — 선행(Phase 4) 충족됨.** Phase 1~7 전부 완료 (2026-08-15에 Phase 3·4·5 종료).
 > 최종 재작성: 2026-08-07 (구조 전면 개편 — 아래 §개편 배경 참조)
-> 최근 수정: 2026-08-08 — 종합 검토 반영: 트랙 구분(§트랙) 신설, 실기 검증·실패 로깅 조기화, Phase 10 선행 완화, DoD 규칙 6 정정 (상세: `DevelopLog.md` 2026-08-08)
+> 최근 수정: 2026-08-15 — Phase 3 종료(피드백 배선 · 승패 우선순위 결정) · Phase 4 종료(좁은 통로 교착 검증) · Phase 5 종료(씬 카메라 `orthographicSize` 정정) · 씬 셋업 전수 실측 `/qa-scene` (상세: `DevelopLog.md` 2026-08-15)
 
 ---
 
@@ -107,7 +107,7 @@
 - [x] `[QA]` 빠른 회전 시 공 튀어오름 없음 · 중력 방향이 화면 "아래"와 일치 확인
 - [x] `[QA]` 2026-08-07 재검증: Maze `pos=(0,0,0) rot=0`, RB2D `Static`, Composite `shapeCount=21`
 
-## Phase 3: 인게임 로직 & Fast Retry ⚠️ *(구 Phase 2 — 일부 미완)*
+## Phase 3: 인게임 로직 & Fast Retry ✅ *(구 Phase 2 · 2026-08-15 완료)*
 > **선행**: Phase 2 **완료 조건**: 골인/실패가 판정되고, 실패 시 씬 재로드 없이 즉시 복원된다
 
 - [x] `[Code]` **Goal 판정**: `OnCollisionEnter2D` + `ColorType` 일치 시에만 골인, 불일치는 물리 벽
@@ -115,21 +115,22 @@
 - [x] `[Code]` **장애물 / DeadZone**: `Obstacle`(범용) + 장외 이탈 `DeadZone` 트리거 → 실패 판정
 - [x] `[Code]` **Fast Retry**: `LoadScene` 없이 Transform·`linearVelocity`·`angularVelocity`·중력·시점 복원
 - [x] `[QA]` 2026-08-07 배선 실측: `GameManager`의 3개 참조 + `InputController`·`WorldRotationController` 참조 전부 non-null
-- [ ] `[Code]` **⚠️ 피드백 배선** — *구 문서에서 완료로 잘못 표기됨(개편 배경 ③)*
-      실체는 쿨타임 가드가 든 `PlayHaptic()` 스텁 하나뿐이고 **호출처가 0건**이다.
-      - [ ] `[Code]` `PlayerBall` 충돌 → `FeedbackManager.PlayHaptic()` 호출 배선
-      - [ ] `[Code]` 충돌 상대속도(충격량)에 비례한 세기 스케일 (TDD §8) — 현재 `intensity` 인자를 받아만 두고 쓰지 않음
-            ⚠️ 현 스텁의 `Handheld.Vibrate()`는 세기 파라미터가 없다(2026-08-08 확인) — 실구현은 Android `VibrationEffect` / iOS Core Haptics 연동이 필요하므로 Phase 13 SFX 배선과 함께 처리 가능
-      - [ ] `[Code]` `Debug.LogWarning` 상시 출력 제거 (`FeedbackManager.cs:30`)
+- [x] `[Code]` **⚠️ 피드백 배선** (2026-08-15) — *구 문서에서 완료로 잘못 표기됨(개편 배경 ③)*
+      착수 시점의 실체는 쿨타임 가드가 든 `PlayHaptic()` 스텁 하나뿐이고 **호출처가 0건**이었다.
+      - [x] `[Code]` `PlayerBall` 충돌 → `FeedbackManager.PlayHaptic()` 호출 배선 — `OnCollisionEnter2D`에서 `collision.relativeVelocity.magnitude`를 세기 인자로 전달
+            플레이 모드 실측: 쿨타임 해제 후 공 발사 → `_lastFeedbackTime` `-999 → 0.02`(**호출됨**) / 쿨타임 활성 시 `9999` 유지(**차단됨**)
+      - [x] `[Code]` `Debug.LogWarning` 상시 출력 제거 (`FeedbackManager.cs:30`) — 충돌 다발 플레이 후 콘솔 경고 0건으로 확인
+      - → `[Code]` **충돌 세기 스케일은 Phase 13으로 이월** (2026-08-15 결정): `Handheld.Vibrate()`에 세기 파라미터가 없어(2026-08-08 확인) Android `VibrationEffect` / iOS Core Haptics 연동이 선행돼야 한다. Phase 13에 동일 항목이 이미 존재하므로 중복 제거를 겸한다
       - → SFX/파티클은 에셋이 없어 **Phase 13**으로 분리
 - [x] `[QA]` **실제 실패 경로 플레이 검증** (2026-08-08 신설·**당일 사용자 실플레이 통과**): DeadZone·Obstacle 충돌 → `GameOver()` → 팝업 없이 즉시 복원(GDD §2), 복원 후 잔여 속도 없음.
       기존 T8 검증(§Phase 7 검증 기록)은 `GameOver()`를 스크립트로 직접 호출한 것이라 "충돌 → 판정" 경로 자체는 미검증이었다.
       (태그·코드 배선은 2026-08-08 파일 실측으로 확인됨 — `PlayerBall.prefab`에 `Player` 태그 존재)
-- [ ] `[Doc]` **승/패 동시 발생 우선순위 결정** (GDD §3.3 = 패배 우선)
+- [x] `[Doc]` **승/패 동시 발생 우선순위 결정** (GDD §3.3 = 패배 우선) — **2026-08-15 결정: 현행 유지**
       `TDD.md §7.6`이 현 구현을 *first-event-wins(콜백 순서 비결정적)* 한계로 기록해 두었으나 **Task에 결정 항목이 없었다.**
-      엄격 적용(`WaitForFixedUpdate` 보류 후 확정)을 할지 현행 유지할지 판단하고 기록할 것.
+      **엄격 적용(`WaitForFixedUpdate` 보류 후 확정)을 하지 않는다** — 동일 물리 스텝에 "마지막 공 골인"과 "다른 공의 이탈/피격"이 겹쳐야 하는 극단적 엣지이고, 골인 확정을 한 스텝 지연시키면 코어 루프의 즉시성을 해치며 Fast Retry 상태 복원과도 얽힌다.
+      → 한계를 `TDD.md §7.6`에 "규칙은 패배 우선이나 **현 구현은 이를 보장하지 않는다**"로 명시(2026-08-15, TDD v1.5).
 
-## Phase 4: 색상 매칭 기반 & 공-공 충돌 정책 ⚠️ *(구 Phase 3 + 3.5)*
+## Phase 4: 색상 매칭 기반 & 공-공 충돌 정책 ✅ *(구 Phase 3 + 3.5 · 2026-08-15 완료)*
 > **선행**: Phase 3 **완료 조건**: 색이 맞는 Goal에만 골인하고, 모든 공이 서로 충돌한다
 >
 > ⚠️ **색상 게이트는 이 Phase에 포함되지 않는다 → Phase 8.** 구 문서가 이 둘을 한 항목에 뭉쳐 사고 ①을 만들었다.
@@ -141,9 +142,11 @@
       ⚠️ **정의만 완료. 오브젝트 할당은 Phase 8** — 현재 공·Goal 전부 `Default(0)` (TDD §5.2 "현재 씬" 항목과 일치)
 - [x] `[Editor]` **공-공 충돌 Matrix**: 전 교차 ON — 2026-07-01 검증(밀림 0.30→0.595), 2026-08-07 재확인
 - [x] `[QA]` 씬 실측: `PlayerBall` 2개(color=Yellow/Green), `Goal` 2개(color=Yellow/Green), 색 일치 골인 동작
-- [ ] `[QA]` **좁은 통로 교착(끼임) 플레이테스트** — *구 문서는 `[x]`였으나 주석에 "인터랙티브 플레이테스트 필요"라 적혀 있었다.* 새 DoD 기준 미완으로 되돌림 (GDD §5.3 레벨 설계 유의)
+- [x] `[QA]` **좁은 통로 교착(끼임) 플레이테스트** — **2026-08-15 사용자 직접 플레이테스트로 검증·통과.**
+      *(이력: 구 문서는 `[x]`였으나 주석에 "인터랙티브 플레이테스트 필요"라 적혀 있어 2026-08-07 개편 때 새 DoD 기준으로 미완 처리했던 항목.)*
+      향후 병목을 좁힐 때의 설계 기준은 `TDD §5.3.1` — 위험 구간 `W = 1.05~1.25`, 안전은 `≥1.3` 또는 `≤0.9` (GDD §5.3 레벨 설계 유의)
 
-## Phase 5: 레벨 오소링 파이프라인 ✅ *(구 Phase 4)*
+## Phase 5: 레벨 오소링 파이프라인 ✅ *(구 Phase 4 · 2026-08-15 완료)*
 > **선행**: Phase 2 **완료 조건**: 곡선·비정형 지형을 표준 절차로 만들어 Composite에 병합할 수 있다
 
 - [x] `[Code]` `StageData` ScriptableObject (제한 시간 · 별점 기준)
@@ -153,6 +156,7 @@
 - [x] `[QA]` **동적 기믹 독립 콜라이더 워크플로우 검증** (2026-07-30): `Used By Composite` 미사용 시 Composite `shapeCount` 불변 확인, **자체 Kinematic `Rigidbody2D` 필수** 조건 발견 (TDD §6.2)
 - [x] `[Editor]` **곡선 벽 실제 저작** (2026-08-06): `Collider Offset = 0.5`로 시각/충돌 정렬, `Assets/Prefabs/RoundWall_0.prefab` 프리팹화
 - [x] `[QA]` **Composite 병합 실측**: `MazeGrid/Maze/Wall_SpriteShape_01` — `shapeCount` 15→16, `pathCount` 2→3, `pointCount` 32→37
+      *(당시 이름. 2026-08-06 저작을 거쳐 현 씬에서는 `MazeGrid/Maze/RoundWall_0` — 2026-08-15 재실측: `usedByComposite=True`·`attachedRB=Maze(Static)`·머티리얼 `null`로 병합 유지, Composite는 `shapeCount 22 / pathCount 2 / pointCount 44`)*
 - [x] `[Editor]` **⚠️ 씬 카메라 `orthographicSize` 정정** (2026-08-15): 컴포넌트 저장값이 `6`인데 런타임은 `Awake`가 `defaultOrthoSize = 10.5`로 덮어썼다.
       → **에디터에서 플레이어보다 좁은 화면을 보고 레벨을 만들게 된다**(반폭 `6 × 0.5625 = 3.375` < 미로 반폭 `4`). `TDD.md §9`가 `6`을 "과거 오설정"으로 명시.
       **씬 저장값을 `10.5`로 정정** — 코드 변경 없음(런타임 결과는 이전과 동일), 에디터 뷰가 실제 플레이 화면과 일치하게 됨. 레벨 양산(Phase 10) 선행 조건 해소.
@@ -358,7 +362,9 @@
 
 - [ ] `[Asset]` **오디오 소스 확보** — 소스가 없으면 착수 불가. BGM 톤·레퍼런스는 GDD §9 `[TBD]`
 - [ ] `[Code]` **SFX 재생 배선**: 충돌음 · 성공음 (Phase 3의 피드백 미완분 회수, 쿨타임 0.1초 공유 — TDD §8)
-- [ ] `[Code]` 충돌 상대속도에 비례한 SFX 볼륨 · 햅틱 세기 스케일
+- [ ] `[Code]` 충돌 상대속도에 비례한 SFX 볼륨 · 햅틱 세기 스케일 (**Phase 3에서 이월** — 2026-08-15)
+      호출 배선 자체는 Phase 3에서 완료됐고(`PlayerBall.OnCollisionEnter2D` → `PlayHaptic(상대속도)`), 여기서 할 일은 **넘겨받은 세기를 실제로 쓰는 것**이다.
+      `Handheld.Vibrate()`엔 세기 파라미터가 없으므로 Android `VibrationEffect` / iOS Core Haptics 연동이 선행돼야 한다
 - [ ] `[Editor]` **골인 파티클** (GDD §3.1 "파티클과 함께 즉시 사라진다" — 현재 미구현)
 - [ ] `[Editor]` 공 Trail Renderer 보강
 - [ ] `[Code]` BGM 루프 + 회전/속도에 따른 미묘한 변화

@@ -7,8 +7,8 @@ Project: Labyrinth (2D Rotating Maze)
 
 | 항목 | 값 |
 |---|---|
-| 버전 | v1.4 |
-| 최종 수정 | 2026-08-08 |
+| 버전 | v1.5 |
+| 최종 수정 | 2026-08-15 |
 | 엔진 | Unity 6 (6000.3.9f1) · URP 2D |
 | 플랫폼 | Mobile (iOS / Android), TargetFrameRate 60+ |
 | 입력 | New Input System (EnhancedTouch) |
@@ -22,6 +22,7 @@ Project: Labyrinth (2D Rotating Maze)
 | 2026-07-30 | v1.1 | Phase 4 실측 반영: §6.1 SpriteShape 병합 절차·검증 지표, §6.2 동적 기믹 **자체 Kinematic Rigidbody2D 필수** 신규 발견, §10 StageData 로드 경로 명시, 부록 체크리스트 2항 추가. |
 | 2026-07-31 | v1.2 | 씬 셋업 결함 2건 수정 반영: §7.4 DeadZone 4프레임 실제 구성(과거 미로와 분리돼 이탈 감지 무력), §9 `defaultOrthoSize ≥ R / targetAspect` 수식 확정(과거 `6` → 세로 화면 클리핑), 부록 체크리스트 2항 추가. |
 | 2026-07-31 | v1.3 | §6.1.1 신설 — `Collider Offset` 정렬 수식(`2t`, 실측표)과 리베이크 함정(`BakeMesh()` 필수). §4 공 실측 크기 정정(반지름 0.3), §5.3.1 끼임 위험 구간 기하 해석 추가. |
+| 2026-08-15 | v1.5 | §7.6 승/패 동시 발생 **결정 기록**(현행 유지 — 규칙은 패배 우선이나 현 구현은 보장하지 않음), §11 `FeedbackManager` 상태 정정(스텁 → 호출 배선 완료, 세기 스케일은 Phase 13). |
 | 2026-08-08 | v1.4 | Task.md 재번호(2026-08-07 개편) 반영 — §5.2·§8·§10의 스테일 Phase 참조 정정, §5.2 Matrix 배선 완료 반영, §11 `FeedbackManager` 상태 정정(✅→스텁·호출처 0건). 본문 Phase 번호는 이제 전부 신 번호를 가리킨다(과거 변경 이력 서술만 구 번호 유지 — 대조는 Task.md §구 번호 ↔ 신 번호 매핑). |
 
 ---
@@ -238,7 +239,10 @@ Project: Labyrinth (2D Rotating Maze)
 ### 7.6 승/패 동시 발생 우선순위 — **규칙 정의**
 * **규칙: 패배 우선.** 동일 물리 스텝에서 "마지막 공 골인(승)"과 "다른 공 데드존/Spike 진입(패)"이 함께 일어나면 **패배로 처리**한다(공을 끝까지 지키지 못한 것으로 간주).
 * **현재 구현 한계**: `OnBallReachedGoal()`·`GameOver()` 모두 `if (State != Play) return` 가드로 보호되어 **먼저 호출된 콜백이 이긴다(first-event-wins)** — 두 콜라이더의 콜백 순서는 비결정적.
-* **엄격 적용이 필요할 때**: 골인 판정을 즉시 Clear로 확정하지 말고 해당 프레임 종료(`yield return new WaitForFixedUpdate` 또는 다음 스텝)까지 보류 후 패배 이벤트 부재를 확인하고 확정. (현재는 단순 가드로 충분하다고 판단되면 보류 가능.)
+* **엄격 적용이 필요할 때**: 골인 판정을 즉시 Clear로 확정하지 말고 해당 프레임 종료(`yield return new WaitForFixedUpdate` 또는 다음 스텝)까지 보류 후 패배 이벤트 부재를 확인하고 확정.
+* **결정 (2026-08-15): 현행 유지 — 엄격 적용하지 않는다.** 즉 **규칙은 패배 우선이나 현 구현은 이를 보장하지 않는다.**
+  * 근거: 동일 물리 스텝에 "마지막 공 골인"과 "다른 공의 이탈/피격"이 겹쳐야 성립하는 극단적 엣지이고, 골인 확정을 한 스텝 지연시키면 코어 루프의 즉시성이 손상되며 Fast Retry 상태 복원과도 얽힌다.
+  * 재도입이 필요해지면 바로 위 "엄격 적용" 절차를 그대로 쓴다. (Task Phase 3 `[Doc]` 항목으로 종결)
 
 ---
 
@@ -299,7 +303,7 @@ Project: Labyrinth (2D Rotating Maze)
 | `WorldRotationController` | `Scripts/` | 각도 보간 + `Physics2D.gravity` 갱신 + 카메라 통지 | ✅ |
 | `CameraController` | `Scripts/` | 해상도 보정 + LateUpdate 역회전 | ✅ |
 | `GameManager` | `Scripts/Managers/` | FSM, 승/패, Fast Retry, 별점 | ✅ |
-| `FeedbackManager` | `Scripts/Managers/` | 햅틱/SFX 쿨타임 피드백 | ⚠️ 스텁(호출처 0건 — Task Phase 3 재개방) |
+| `FeedbackManager` | `Scripts/Managers/` | 햅틱/SFX 쿨타임 피드백 | ⚠️ 호출 배선 완료(`PlayerBall` 충돌 → `PlayHaptic`, 2026-08-15) · **세기 스케일·SFX는 Task Phase 13** |
 | `PlayerBall` | `Scripts/Objects/` | 색상·초기상태·FastReset | ✅ |
 | `Goal` | `Scripts/Objects/` | 색상 매칭 골인/벽 처리 | ✅ |
 | `DeadZone` | `Scripts/Objects/` | 장외 이탈 실패 | ✅ |
