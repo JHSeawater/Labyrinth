@@ -38,6 +38,37 @@ Phase 5의 미결 항목이 그대로 남아 있음을 재확인하고 정정했
 
 ---
 
+### 📅 [2026-08-15] AI 워크플로 인프라 구축 — 씬 편집 가드 훅 · `/qa-scene` · `/phase-close`
+
+> ⚠️ **다른 AI 세션을 위한 요지**: 이 프로젝트에는 이제 ① `.unity`/`.prefab` 파일의 **텍스트 직접 편집(Edit/Write)을 차단하는 훅**과 ② 커스텀 스킬 2종(`/qa-scene`, `/phase-close`)이 있다. 씬/프리팹 수정 시 차단 메시지를 받으면 그것은 오류가 아니라 의도된 가드다 — **UnityMCP 도구**(`manage_scene`/`manage_gameobject`/`manage_prefabs`)를 사용할 것.
+
+#### 1. 배경
+
+Claude Code 활용 개선 제안(서브에이전트·훅·스킬·MCP 구성 검토) 중 우선순위 1순위로 채택된 3건을 구축했다. 목적: CLAUDE.md §2의 작업 절차와 Task.md의 DoD 규칙을 "문서가 기억하는 규칙"에서 "하네스가 강제하는 규칙"으로 옮기는 것.
+
+#### 2. 구축 내역
+
+* **씬/프리팹 편집 가드 훅** — `.claude/settings.json`(신규, 커밋 대상): `PreToolUse` 이벤트에서 `Edit|Write` 도구를 가로채, 대상 `file_path`가 `.unity`/`.prefab`이면 실행 전에 차단(node 원라이너, exit 2). 씬 YAML을 텍스트로 고치다 깨뜨리는 사고를 구조적으로 방지. JSON 파싱 실패 시에는 통과(fail-open)라 다른 파일 작업을 방해하지 않는다.
+* **`/qa-scene` 스킬** — `.claude/skills/qa-scene/SKILL.md`: TDD.md 부록 체크리스트를 UnityMCP로 전수 실측하는 읽기 전용 스킬. 체크리스트를 스킬에 복제하지 않고 **실행 시점에 TDD.md를 다시 읽는** 구조라 문서 갱신을 자동으로 따라간다. Layer Matrix 비트 디코딩·DeadZone 프레임·orthoSize 수식 등 검증 레시피 포함. *(같은 날 첫 실행에서 카메라 orthoSize 결함을 실제로 잡아냄 — 바로 위 로그 참조.)*
+* **`/phase-close` 스킬** — `.claude/skills/phase-close/SKILL.md`: Phase 종료 표준 절차. DoD 게이트(미완 항목 잔존 시 닫기 거부, `[QA]` 존재, 실측 근거 없는 `[x]` 의심 목록 보고) → Task.md "현재 위치" 갱신 → DevelopLog 최상단 기록 → GDD/TDD 정합성 점검 → 커밋 제안 순.
+* **`.gitignore`**: `/.claude/settings.local.json` 추가 — 개인 권한 설정이 `git add`에 딸려 들어가지 않게. 공유 설정(`.claude/settings.json`)과 스킬은 커밋 대상.
+
+#### 3. 검증
+
+훅은 3단계로 검증: ① 합성 stdin 페이로드 5종 파이프 테스트(`.unity`·`.prefab` 차단 / `.cs`·`.md` 통과 / 파일 내용에 ".unity" 문자열이 있어도 오탐 없음 / 깨진 JSON 무해 통과), ② settings.json에 저장된 명령 문자열 그대로 end-to-end 재실행, ③ 실제 세션에서 더미 `.unity` 파일 Write 시도 → 차단 확인(재시작 없이 즉시 작동).
+
+#### 4. 유지보수 주의 (훅을 수정할 AI를 위해)
+
+* **훅 스크립트에 백슬래시를 쓰지 말 것**: AI 도구 호출의 문자열 인코딩 층에서 `\\`가 `\`로 축약되는 것이 실측으로 확인됐다(구축 중 이것 때문에 테스트 페이로드가 깨졌음). 현재 스크립트는 정규식을 `[.](unity|prefab)$`처럼 백슬래시 0개로 작성해 이 문제를 원천 회피했다 — 수정 시에도 이 원칙을 유지할 것.
+* 훅은 `node`가 PATH에 있어야 동작한다(`C:\Program Files\nodejs` 확인됨). 편집당 node 기동 비용 ~0.1–0.3초. 비활성화는 `/hooks` 메뉴 또는 settings.json에서 블록 제거.
+
+* **해결된 이슈**:
+  * 씬/프리팹 텍스트 직접 편집 사고 가능성 — 훅으로 원천 차단 (라이브 발화 검증 완료)
+  * TDD 부록 체크리스트 검증·Phase 종료 절차가 세션마다 재량 수행되던 문제 — 스킬로 표준화
+  * `settings.local.json`(개인 설정)의 우발적 커밋 가능성 — `.gitignore`로 차단
+
+---
+
 ### 📅 [2026-08-08] Phase 7 완료 — Safe Area 대응 (`SafeAreaFitter`)
 
 #### 1. 구현

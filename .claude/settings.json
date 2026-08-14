@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node -e 'let d=\"\";process.stdin.on(\"data\",c=>d+=c).on(\"end\",()=>{try{const p=(JSON.parse(d).tool_input||{}).file_path||\"\";if(/[.](unity|prefab)$/i.test(p)){console.error(\"BLOCKED: 씬(.unity)/프리팹(.prefab) 파일은 텍스트 직접 편집이 금지되어 있습니다. UnityMCP 도구(manage_scene / manage_gameobject / manage_prefabs)를 사용하세요 (CLAUDE.md §2).\");process.exit(2)}}catch(e){}})'",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

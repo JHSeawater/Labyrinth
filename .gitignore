@@ -121,3 +121,6 @@ InitTestScene*.unity*
 # Project-specific: 개발 QA 스크린샷 (게임 에셋 아님)
 /[Aa]ssets/[Ss]creenshots/
 /[Aa]ssets/[Ss]creenshots.meta
+
+# Claude Code: 개인 로컬 설정은 커밋하지 않음 (팀 공유 설정은 .claude/settings.json)
+/.claude/settings.local.json
