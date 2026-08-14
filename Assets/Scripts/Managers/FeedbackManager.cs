@@ -20,6 +20,11 @@ public class FeedbackManager : MonoBehaviour
         if (Instance == this) Instance = null;
     }
 
+    /// <summary>
+    /// 충돌 피드백. 0.1초 내부 쿨타임으로 진동 모터 폭주·사운드 깨짐을 막습니다(TDD §8).
+    /// ⚠️ <paramref name="intensity"/>는 아직 쓰이지 않는다 — `Handheld.Vibrate()`에 세기 인자가 없어,
+    /// 실제 스케일링은 Android `VibrationEffect` / iOS Core Haptics 연동과 함께 Phase 13에서 처리한다.
+    /// </summary>
     public void PlayHaptic(float intensity)
     {
         if (Time.time - _lastFeedbackTime < FEEDBACK_COOLDOWN)
@@ -27,7 +32,6 @@ public class FeedbackManager : MonoBehaviour
 
         _lastFeedbackTime = Time.time;
 
-        Debug.LogWarning($"[FeedbackManager] PlayHaptic: intensity={intensity}", this);
 #if UNITY_ANDROID || UNITY_IOS
         Handheld.Vibrate();
 #endif

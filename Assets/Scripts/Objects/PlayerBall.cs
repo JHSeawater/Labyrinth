@@ -19,6 +19,17 @@ public class PlayerBall : MonoBehaviour
     }
 
     /// <summary>
+    /// 충돌 시 햅틱 피드백을 요청합니다. 세기 인자로 충돌 상대속도(충격량)를 넘기고,
+    /// 실제 세기 스케일링은 FeedbackManager 쪽에서 처리합니다(Phase 13).
+    /// 연속 충돌 시 모터 폭주를 막는 0.1초 쿨타임은 FeedbackManager 내부가 강제합니다(TDD §8).
+    /// </summary>
+    private void OnCollisionEnter2D(Collision2D collision)
+    {
+        if (FeedbackManager.Instance != null)
+            FeedbackManager.Instance.PlayHaptic(collision.relativeVelocity.magnitude);
+    }
+
+    /// <summary>
     /// 게임 재시작 시 돌아갈 초기 위치와 회전을 저장합니다.
     /// (GameManager가 아닌 각 공이 스스로의 상태를 캐싱)
     /// </summary>
